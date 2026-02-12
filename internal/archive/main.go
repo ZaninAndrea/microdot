@@ -22,14 +22,14 @@ import "fmt"
 //	 			- The length of the compressed chunk (uint64)
 //	 			- In the future we may also add metadata, such as min/max values for the chunk
 //
-// Each column data is split into 1000 row blocks, each chunk (block-column pair) is compressed separately.
+// Each column data is split into BLOCK_SIZE row blocks, each chunk (block-column pair) is compressed separately.
 
 var ErrUnsupportedColumnType = fmt.Errorf("unsupported column type")
 var ErrUnsupportedFormatVersion = fmt.Errorf("unsupported format version")
 var ErrNoColumns = fmt.Errorf("at least one column is required")
 
 const FORMAT_VERSION uint32 = 1
-const CHUNK_SIZE int = 1000
+const BLOCK_SIZE int = 1000
 
 type ColumnType uint16
 
@@ -47,11 +47,11 @@ type ColumnDef struct {
 
 type Row []any
 
-type BlockMetadata struct {
-	Chunks []ChunkMetadata
+type blockMetadata struct {
+	Chunks []chunkMetadata
 }
 
-type ChunkMetadata struct {
+type chunkMetadata struct {
 	Offset uint64
 	Length uint64
 }

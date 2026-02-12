@@ -5,7 +5,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/ZaninAndrea/microdot/internal/compression"
+	"github.com/ZaninAndrea/microdot/pkg/compression"
 )
 
 type Writer struct {
@@ -14,7 +14,7 @@ type Writer struct {
 	columns      []ColumnDef
 
 	bufferedRows []Row
-	blocks       []BlockMetadata
+	blocks       []blockMetadata
 }
 
 func NewWriter(columns []ColumnDef, dataFile, metadataFile io.WriteCloser) (*Writer, error) {
@@ -27,7 +27,7 @@ func NewWriter(columns []ColumnDef, dataFile, metadataFile io.WriteCloser) (*Wri
 		metadataFile: structuredWriter{w: metadataFile},
 		columns:      columns,
 		bufferedRows: []Row{},
-		blocks:       []BlockMetadata{},
+		blocks:       []blockMetadata{},
 	}
 
 	err := writer.writeMetadataHeader()
@@ -78,23 +78,23 @@ func (w *Writer) writeMetadataHeader() error {
 func (w *Writer) Write(rows []Row) error {
 	w.bufferedRows = append(w.bufferedRows, rows...)
 
-	for len(w.bufferedRows) >= CHUNK_SIZE {
+	for len(w.bufferedRows) >= BLOCK_SIZE {
 		if err := w.writeChunk(); err != nil {
 			return err
 		}
-		w.bufferedRows = w.bufferedRows[CHUNK_SIZE:]
+		w.bufferedRows = w.bufferedRows[BLOCK_SIZE:]
 	}
 
 	return nil
 }
 
 func (w *Writer) writeChunk() error {
-	chunkEnd := CHUNK_SIZE
-	if len(w.bufferedRows) < CHUNK_SIZE {
+	chunkEnd := BLOCK_SIZE
+	if len(w.bufferedRows) < BLOCK_SIZE {
 		chunkEnd = len(w.bufferedRows)
 	}
 
-	chunkMetadata := []ChunkMetadata{}
+	chunks := []chunkMetadata{}
 	rows := w.bufferedRows[:chunkEnd]
 	for i := range w.columns {
 		startOffset := w.dataFile.Offset()
@@ -121,14 +121,14 @@ func (w *Writer) writeChunk() error {
 
 		chunkLength := w.dataFile.Offset() - startOffset
 
-		chunkMetadata = append(chunkMetadata, ChunkMetadata{
+		chunks = append(chunks, chunkMetadata{
 			Offset: startOffset,
 			Length: chunkLength,
 		})
 	}
 
-	w.blocks = append(w.blocks, BlockMetadata{
-		Chunks: chunkMetadata,
+	w.blocks = append(w.blocks, blockMetadata{
+		Chunks: chunks,
 	})
 
 	return nil

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"testing/quick"
 
-	"github.com/ZaninAndrea/microdot/internal/compression"
+	"github.com/ZaninAndrea/microdot/pkg/compression"
 )
 
 func TestDeltaOfDelta(t *testing.T) {

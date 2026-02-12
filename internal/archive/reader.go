@@ -8,7 +8,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/ZaninAndrea/microdot/internal/compression"
+	"github.com/ZaninAndrea/microdot/pkg/compression"
 	"github.com/ZaninAndrea/microdot/pkg/containers"
 )
 
@@ -17,7 +17,7 @@ type Reader struct {
 	metadataFile structuredReader
 	columnDefs   []ColumnDef
 	blockCount   uint64
-	blocks       []BlockMetadata
+	blocks       []blockMetadata
 }
 
 func NewReader(dataFile, metadataFile io.ReadCloser) (*Reader, error) {
@@ -113,29 +113,29 @@ func (r *Reader) Close() error {
 
 // blockMetadata returns the metadata for the i-th block.
 // If available the metadata is returned from the cache, otherwise it is read from the metadata file and cached for future use.
-func (r *Reader) blockMetadata(i int) (BlockMetadata, error) {
+func (r *Reader) blockMetadata(i int) (blockMetadata, error) {
 	if i < 0 || i >= int(r.blockCount) {
-		return BlockMetadata{}, fmt.Errorf("block index out of range")
+		return blockMetadata{}, fmt.Errorf("block index out of range")
 	}
 
 	// Read the metadata file sequentially until we have the metadata for the requested block
 	for j := len(r.blocks); j <= i; j++ {
-		blockMeta := BlockMetadata{
-			Chunks: make([]ChunkMetadata, len(r.columnDefs)),
+		blockMeta := blockMetadata{
+			Chunks: make([]chunkMetadata, len(r.columnDefs)),
 		}
 
 		for j := range r.columnDefs {
 			offset, err := r.metadataFile.ReadUInt64()
 			if err != nil {
-				return BlockMetadata{}, err
+				return blockMetadata{}, err
 			}
 
 			length, err := r.metadataFile.ReadUInt64()
 			if err != nil {
-				return BlockMetadata{}, err
+				return blockMetadata{}, err
 			}
 
-			blockMeta.Chunks[j] = ChunkMetadata{
+			blockMeta.Chunks[j] = chunkMetadata{
 				Offset: offset,
 				Length: length,
 			}
@@ -184,7 +184,7 @@ func (r *Reader) Rows() iter.Seq[containers.Result[Row]] {
 
 // readBlockColumns reads the columns of a block and returns them as a 2D slice of any ([][]any).
 // The outer slice represents the columns, while the inner slices represent the values of each column.
-func (r *Reader) readBlockColumns(blockMeta BlockMetadata) ([][]any, error) {
+func (r *Reader) readBlockColumns(blockMeta blockMetadata) ([][]any, error) {
 	columns := make([][]any, len(r.columnDefs))
 	for i, columnDef := range r.columnDefs {
 		switch columnDef.Type {
@@ -220,7 +220,7 @@ func (r *Reader) readBlockColumns(blockMeta BlockMetadata) ([][]any, error) {
 	return columns, nil
 }
 
-func (r *Reader) readInt64Column(chunkMetadata ChunkMetadata) ([]any, error) {
+func (r *Reader) readInt64Column(chunkMetadata chunkMetadata) ([]any, error) {
 	chunkReader, err := r.getChunkReader(chunkMetadata)
 	if err != nil {
 		return nil, err
@@ -235,7 +235,7 @@ func (r *Reader) readInt64Column(chunkMetadata ChunkMetadata) ([]any, error) {
 	return compression.DecodeDeltaOfDelta(data)
 }
 
-func (r *Reader) readBoolColumn(chunkMetadata ChunkMetadata) ([]any, error) {
+func (r *Reader) readBoolColumn(chunkMetadata chunkMetadata) ([]any, error) {
 	chunkReader, err := r.getChunkReader(chunkMetadata)
 	if err != nil {
 		return nil, err
@@ -250,7 +250,7 @@ func (r *Reader) readBoolColumn(chunkMetadata ChunkMetadata) ([]any, error) {
 	return compression.DecodeBitPacking(data)
 }
 
-func (r *Reader) readFloat64Column(chunkMetadata ChunkMetadata) ([]any, error) {
+func (r *Reader) readFloat64Column(chunkMetadata chunkMetadata) ([]any, error) {
 	chunkReader, err := r.getChunkReader(chunkMetadata)
 	if err != nil {
 		return nil, err
@@ -269,7 +269,7 @@ func (r *Reader) readFloat64Column(chunkMetadata ChunkMetadata) ([]any, error) {
 	return values, nil
 }
 
-func (r *Reader) readStringColumn(chunkMetadata ChunkMetadata) ([]any, error) {
+func (r *Reader) readStringColumn(chunkMetadata chunkMetadata) ([]any, error) {
 	chunkReader, err := r.getChunkReader(chunkMetadata)
 	if err != nil {
 		return nil, err
@@ -291,7 +291,7 @@ func (r *Reader) readStringColumn(chunkMetadata ChunkMetadata) ([]any, error) {
 	return values, nil
 }
 
-func (r *Reader) getChunkReader(chunkMetadata ChunkMetadata) (*structuredReader, error) {
+func (r *Reader) getChunkReader(chunkMetadata chunkMetadata) (*structuredReader, error) {
 	data := make([]byte, chunkMetadata.Length)
 	_, err := r.dataFile.Read(data)
 	if err != nil {
