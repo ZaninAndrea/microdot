@@ -1,9 +1,12 @@
 package archive
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"math"
+
+	"github.com/pierrec/lz4/v4"
 )
 
 type structuredWriter struct {
@@ -139,6 +142,23 @@ func (sw *structuredWriter) WriteInt8(value int8) error {
 	buf[0] = uint8(value)
 	_, err := sw.Write(buf[:])
 	return err
+}
+
+// WriteLZ4 compresses the input data using LZ4 and writes it to the underlying writer.
+func (sw *structuredWriter) WriteLZ4(p []byte) error {
+	compressedWriter := lz4.NewWriter(sw)
+
+	_, err := compressedWriter.Write(p)
+	if err != nil {
+		return err
+	}
+
+	err = compressedWriter.Close()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type structuredReader struct {
@@ -295,4 +315,18 @@ func (sr *structuredReader) ReadInt8() (int8, error) {
 		return 0, err
 	}
 	return int8(buf[0]), nil
+}
+
+// ReadLZ4 reads LZ4-compressed data from the underlying reader and decompresses it.
+func (sr *structuredReader) ReadLZ4() ([]byte, error) {
+	compressedReader := lz4.NewReader(sr)
+
+	buffer := bytes.NewBuffer(nil)
+
+	_, err := compressedReader.WriteTo(buffer)
+	if err != nil {
+		return nil, err
+	}
+
+	return buffer.Bytes(), nil
 }

@@ -221,8 +221,13 @@ func (r *Reader) readBlockColumns(blockMeta BlockMetadata) ([][]any, error) {
 }
 
 func (r *Reader) readInt64Column(chunkMetadata ChunkMetadata) ([]any, error) {
-	data := make([]byte, chunkMetadata.Length)
-	_, err := r.dataFile.Read(data)
+	chunkReader, err := r.getChunkReader(chunkMetadata)
+	if err != nil {
+		return nil, err
+	}
+	defer chunkReader.Close()
+
+	data, err := chunkReader.ReadLZ4()
 	if err != nil {
 		return nil, err
 	}
@@ -231,8 +236,13 @@ func (r *Reader) readInt64Column(chunkMetadata ChunkMetadata) ([]any, error) {
 }
 
 func (r *Reader) readBoolColumn(chunkMetadata ChunkMetadata) ([]any, error) {
-	data := make([]byte, chunkMetadata.Length)
-	_, err := r.dataFile.Read(data)
+	chunkReader, err := r.getChunkReader(chunkMetadata)
+	if err != nil {
+		return nil, err
+	}
+	defer chunkReader.Close()
+
+	data, err := chunkReader.ReadLZ4()
 	if err != nil {
 		return nil, err
 	}

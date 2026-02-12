@@ -141,7 +141,7 @@ func (w *Writer) writeInt64Column(rows []Row, columnIndex int) error {
 	}
 	encoded := compression.EncodeDeltaOfDelta(values)
 
-	_, err := w.dataFile.Write(encoded)
+	err := w.dataFile.WriteLZ4(encoded)
 	if err != nil {
 		return err
 	}
@@ -176,7 +176,7 @@ func (w *Writer) writeBoolColumn(rows []Row, columnIndex int) error {
 	}
 	encoded := compression.EncodeBitPacking(values)
 
-	_, err := w.dataFile.Write(encoded)
+	err := w.dataFile.WriteLZ4(encoded)
 	if err != nil {
 		return err
 	}
