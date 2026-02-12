@@ -24,6 +24,7 @@ func TestReadWriteCycle(t *testing.T) {
 			{Key: "ts", Type: ColumnTypeInt64},
 			{Key: "value", Type: ColumnTypeFloat64},
 			{Key: "meta", Type: ColumnTypeString},
+			{Key: "flag", Type: ColumnTypeBool},
 		}
 
 		rows := make([]Row, 0, 1500)
@@ -32,6 +33,7 @@ func TestReadWriteCycle(t *testing.T) {
 				int64(2000 + i),
 				float64(i) * 0.1,
 				fmt.Sprintf("generated_%d", i),
+				i%2 == 0, // flag is true for even rows, false for odd rows
 			})
 		}
 

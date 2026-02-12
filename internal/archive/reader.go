@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/ZaninAndrea/microdot/internal/compression"
 	"github.com/ZaninAndrea/microdot/pkg/containers"
 )
 
@@ -205,6 +206,12 @@ func (r *Reader) readBlockColumns(blockMeta BlockMetadata) ([][]any, error) {
 				return nil, err
 			}
 			columns[i] = data
+		case ColumnTypeBool:
+			data, err := r.readBoolColumn(blockMeta.Chunks[i])
+			if err != nil {
+				return nil, err
+			}
+			columns[i] = data
 		default:
 			return nil, ErrUnsupportedColumnType
 		}
@@ -214,22 +221,23 @@ func (r *Reader) readBlockColumns(blockMeta BlockMetadata) ([][]any, error) {
 }
 
 func (r *Reader) readInt64Column(chunkMetadata ChunkMetadata) ([]any, error) {
-	chunkReader, err := r.getChunkReader(chunkMetadata)
+	data := make([]byte, chunkMetadata.Length)
+	_, err := r.dataFile.Read(data)
 	if err != nil {
 		return nil, err
 	}
-	defer chunkReader.Close()
 
-	// Read the int64 values from the byte slice
-	values := make([]any, chunkMetadata.Length/8)
-	for i := 0; i < len(values); i++ {
-		values[i], err = chunkReader.ReadInt64()
-		if err != nil {
-			return nil, err
-		}
+	return compression.DecodeDeltaOfDelta(data)
+}
+
+func (r *Reader) readBoolColumn(chunkMetadata ChunkMetadata) ([]any, error) {
+	data := make([]byte, chunkMetadata.Length)
+	_, err := r.dataFile.Read(data)
+	if err != nil {
+		return nil, err
 	}
 
-	return values, nil
+	return compression.DecodeBitPacking(data)
 }
 
 func (r *Reader) readFloat64Column(chunkMetadata ChunkMetadata) ([]any, error) {

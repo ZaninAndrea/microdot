@@ -22,7 +22,12 @@ func TestDeltaOfDelta(t *testing.T) {
 				return len(decoded) == 0
 			}
 
-			return reflect.DeepEqual(raw, decoded)
+			decodedInts := make([]int64, len(decoded))
+			for i, v := range decoded {
+				decodedInts[i] = v.(int64)
+			}
+
+			return reflect.DeepEqual(raw, decodedInts)
 		}
 
 		if err := quick.Check(f, nil); err != nil {
@@ -68,8 +73,13 @@ func FuzzDeltaOfDelta(f *testing.F) {
 			return // Invalid input is fine
 		}
 
+		decodedInts := make([]int64, len(decoded))
+		for i, v := range decoded {
+			decodedInts[i] = v.(int64)
+		}
+
 		// Re-encode and check if it decodes to the same thing
-		encoded := compression.EncodeDeltaOfDelta(decoded)
+		encoded := compression.EncodeDeltaOfDelta(decodedInts)
 		decoded2, err := compression.DecodeDeltaOfDelta(encoded)
 		if err != nil {
 			t.Fatalf("Failed to decode re-encoded data: %v", err)

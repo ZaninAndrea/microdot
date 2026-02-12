@@ -6,6 +6,7 @@ import (
 	"io"
 )
 
+// EncodeDeltaOfDelta encodes a slice of int64 values using delta-of-delta encoding.
 func EncodeDeltaOfDelta(values []int64) []byte {
 	if len(values) == 0 {
 		return []byte{}
@@ -27,13 +28,14 @@ func EncodeDeltaOfDelta(values []int64) []byte {
 	return encoded
 }
 
-func DecodeDeltaOfDelta(encoded []byte) ([]int64, error) {
+// DecodeDeltaOfDelta decodes a byte slice encoded with delta-of-delta encoding back into a slice of int64 values.
+func DecodeDeltaOfDelta(encoded []byte) ([]any, error) {
 	if len(encoded) == 0 {
-		return []int64{}, nil
+		return []any{}, nil
 	}
 
 	reader := bytes.NewReader(encoded)
-	data := []int64{}
+	data := []any{}
 
 	var previous int64 = 0
 	var previousDelta int64 = 0

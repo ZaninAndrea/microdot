@@ -37,6 +37,7 @@ var (
 	ColumnTypeInt64   ColumnType = 0
 	ColumnTypeFloat64 ColumnType = 1
 	ColumnTypeString  ColumnType = 2
+	ColumnTypeBool    ColumnType = 3
 )
 
 type ColumnDef struct {

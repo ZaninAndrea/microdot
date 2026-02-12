@@ -4,6 +4,8 @@ import (
 	"io"
 	"os"
 	"path"
+
+	"github.com/ZaninAndrea/microdot/internal/compression"
 )
 
 type Writer struct {
@@ -98,22 +100,20 @@ func (w *Writer) writeChunk() error {
 		startOffset := w.dataFile.Offset()
 		switch w.columns[i].Type {
 		case ColumnTypeInt64:
-			for _, row := range rows {
-				if err := w.dataFile.WriteInt64(row[i].(int64)); err != nil {
-					return err
-				}
+			if err := w.writeInt64Column(rows, i); err != nil {
+				return err
 			}
 		case ColumnTypeFloat64:
-			for _, row := range rows {
-				if err := w.dataFile.WriteFloat64(row[i].(float64)); err != nil {
-					return err
-				}
+			if err := w.writeFloat64Column(rows, i); err != nil {
+				return err
 			}
 		case ColumnTypeString:
-			for _, row := range rows {
-				if err := w.dataFile.WriteString(row[i].(string)); err != nil {
-					return err
-				}
+			if err := w.writeStringColumn(rows, i); err != nil {
+				return err
+			}
+		case ColumnTypeBool:
+			if err := w.writeBoolColumn(rows, i); err != nil {
+				return err
 			}
 		default:
 			return ErrUnsupportedColumnType
@@ -130,6 +130,56 @@ func (w *Writer) writeChunk() error {
 	w.blocks = append(w.blocks, BlockMetadata{
 		Chunks: chunkMetadata,
 	})
+
+	return nil
+}
+
+func (w *Writer) writeInt64Column(rows []Row, columnIndex int) error {
+	values := make([]int64, len(rows))
+	for i, row := range rows {
+		values[i] = row[columnIndex].(int64)
+	}
+	encoded := compression.EncodeDeltaOfDelta(values)
+
+	_, err := w.dataFile.Write(encoded)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (w *Writer) writeFloat64Column(rows []Row, columnIndex int) error {
+	for _, row := range rows {
+		if err := w.dataFile.WriteFloat64(row[columnIndex].(float64)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (w *Writer) writeStringColumn(rows []Row, columnIndex int) error {
+	for _, row := range rows {
+		if err := w.dataFile.WriteString(row[columnIndex].(string)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (w *Writer) writeBoolColumn(rows []Row, columnIndex int) error {
+	values := make([]bool, len(rows))
+	for i, row := range rows {
+		values[i] = row[columnIndex].(bool)
+	}
+	encoded := compression.EncodeBitPacking(values)
+
+	_, err := w.dataFile.Write(encoded)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

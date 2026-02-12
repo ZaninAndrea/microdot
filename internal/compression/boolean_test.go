@@ -11,12 +11,17 @@ import (
 
 func TestBitPackIdentity(t *testing.T) {
 	f := func(raw []bool) bool {
-		enc := compression.BitPackingEncoder{}
-		encoded := enc.Encode(raw)
-		encoded = append(encoded, enc.Flush()...)
+		encoded := compression.EncodeBitPacking(raw)
+		decoded, err := compression.DecodeBitPacking(encoded)
+		if err != nil {
+			t.Logf("Error decoding: %v. Encoded: %b", err, encoded)
+			return false
+		}
 
-		dec := compression.BitPackingDecoder{}
-		decoded := dec.Decode(encoded)
+		if len(decoded) != len(raw) {
+			t.Logf("Length mismatch: expected %d, got %d. Encoded: %b", len(raw), len(decoded), encoded)
+			return false
+		}
 
 		for i := range raw {
 			if decoded[i] != raw[i] {
@@ -44,22 +49,17 @@ func BenchmarkBitPack(b *testing.B) {
 
 		b.Run(fmt.Sprintf("Encode_%d", n), func(b *testing.B) {
 			b.ReportAllocs()
-			var enc compression.BitPackingEncoder
 			for i := 0; i < b.N; i++ {
-				res := enc.Encode(data)
-				_ = append(res, enc.Flush()...)
+				_ = compression.EncodeBitPacking(data)
 			}
 		})
 
-		enc := compression.BitPackingEncoder{}
-		encoded := enc.Encode(data)
-		encoded = append(encoded, enc.Flush()...)
+		encoded := compression.EncodeBitPacking(data)
 
 		b.Run(fmt.Sprintf("Decode_%d", n), func(b *testing.B) {
 			b.ReportAllocs()
-			var dec compression.BitPackingDecoder
 			for i := 0; i < b.N; i++ {
-				_ = dec.Decode(encoded)
+				_, _ = compression.DecodeBitPacking(encoded)
 			}
 		})
 	}
