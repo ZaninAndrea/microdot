@@ -29,42 +29,14 @@ Altri aspetti desiderabili ma non obbligatori in una prima fase sono:
 - Possibilità di salvare metriche oltre che logs (il formato di input potrebbe essere lo stesso, semplicemente omettendo il campo messaggio)
 
 = Storage engine
-Lo storage engine deve essere un LSM-tree o simili:
-- Non va bene salvare i dati semplicemente nel WAL, perché potrebbero arrivare out-of-order, quindi devo usare un LSM-tree per poterli riordinare dato che l’accesso sarà in order
-- LSM-tree per poter avere high ingest rate e avere batched sequential writes
-- Column storage per miglior compressione dei dati e supporto a sparse columns
-- Idealmente il partitioning dovrebbe essere ottimizzato automaticamente dal sistema. Dovrebbe dividere le partizioni per mantenere la dimensione in un certo range
-  - Mentre dividi l’lsm-tree i dati nuovi vengono aggiunti ad altre stables già nelle partizioni nuove
-  - Le sstables verranno poi compattate normalmente
-- L'eliminazione dei valori è supportata con un sistema di tombstone. Le tombstone sono salvate in una zona specifica del file su disco, in questo modo non sprechiamo spazio: per ciascuna tombstone salviamo solo il valore della chiave e nella zona con dati veri non serve aggiungere delle flag "tombstone".
 
-Molti time-series DB usano delle variazioni di LSM-tree che risolvono alcune problematiche specifiche, come ad esempio:
-- Possibilità di droppare efficientemente i dati più vecchi
-  - Alcuni DB dividono i dati in shard in modo da poter eliminare una shard intera semplicemente droppando una cartella/file
-  - Altri DB implementano un TTL che viene applicato durante la compaction
-- Evitare di avere troppe file handle aperte, in particolare per le implementazioni che fanno sharding
-
-In InfluxDB ciascuna SSTable contiene un blocco per ogni series e ciascun blocco contiene compressi i dati di una timeseries. La scelta della compressione e l'elenco delle colonne è a livello di blocco.
-
-Gerarchia fisica di storage:
-
-- DBMS: Un’istanza o un cluster di istanze del DMBS
-- Database: Ciascun DBMS contiene vari Database, ogni database ha una gestione separata di autorizzazioni
-- Partition: I dati di ciascun database sono partizionati in base al timestamp (e.g. su base giornaliera)
-- DataDB e IndexDB: ciascuna partition contiene un LSMTree per i dati e un LSMTree per gli indici
-
-Organizzazione logica dei dati:
-
-- Log: l’unità base è un log, che può essere structured o unstructured
-- Stream: ciascun log appartiene ad uno stream, questo corrisponde tipicamente al processo che lo ha generato (e.g. il container docker).
-  - Ciascuno stream può avere delle regole diverse per la retention window idealmente
-- Database: gli stream sono raggruppati in database, che corrispondono tipicamente al servizio/prodotto a cui appartengono
+Ciascuno stream viene salvato in vari file, sharded in base al timestamp di ricezione. I file sono column-oriented.
 
 == Compaction
 
 L'obiettivo della compaction è convertire un formato rapido da scrivere in un formato rapido da leggere.
 
-Per le performance delle implementazioni base su LSM-trees è molto importante il design della procedura di compaction.
+Per le performance delle implementazioni basate su LSM-trees è molto importante il design della procedura di compaction.
 
 InfluxDB ad esempio usa diverse strategie di compaction per SSTable recenti e per SSTable vecchie in modo da bilanciare l'uso di risorse e l'aumento di read-performance.
 
@@ -81,6 +53,9 @@ Dovremmo tenere uno sparse index per timestamp in modo da poter iniziare a legge
 
 Le opzioni possono essere:
 - inverted index - trigram index: https://swtch.com/~rsc/regexp/regexp4.html - dovrebbe essere particolarmente adatta per il caso dei log, ovvero tanti documenti molto piccoli
+  - skip pointers
+  - compressione delle posting lists
+  - p for delta
 - trie or HAT trie
 - bloom filter
 
