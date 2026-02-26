@@ -13,17 +13,17 @@ import (
 )
 
 type Reader struct {
-	dataFile     structuredReader
-	metadataFile structuredReader
+	dataFile     StructuredReader
+	metadataFile StructuredReader
 	columnDefs   []ColumnDef
 	blockCount   uint64
 	blocks       []blockMetadata
 }
 
-func NewReader(dataFile, metadataFile io.ReadCloser) (*Reader, error) {
+func NewReader(dataFile, metadataFile io.ReadSeekCloser) (*Reader, error) {
 	reader := &Reader{
-		dataFile:     structuredReader{r: dataFile},
-		metadataFile: structuredReader{r: metadataFile},
+		dataFile:     StructuredReader{r: dataFile},
+		metadataFile: StructuredReader{r: metadataFile},
 	}
 
 	err := reader.readMetadataHeader()
@@ -291,14 +291,14 @@ func (r *Reader) readStringColumn(chunkMetadata chunkMetadata) ([]any, error) {
 	return values, nil
 }
 
-func (r *Reader) getChunkReader(chunkMetadata chunkMetadata) (*structuredReader, error) {
+func (r *Reader) getChunkReader(chunkMetadata chunkMetadata) (*StructuredReader, error) {
 	data := make([]byte, chunkMetadata.Length)
 	_, err := r.dataFile.Read(data)
 	if err != nil {
 		return nil, err
 	}
 
-	return &structuredReader{r: byteReadCloser{Reader: bytes.NewReader(data)}}, nil
+	return &StructuredReader{r: byteReadCloser{Reader: bytes.NewReader(data)}}, nil
 }
 
 type byteReadCloser struct {

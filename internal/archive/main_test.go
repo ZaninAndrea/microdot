@@ -18,6 +18,16 @@ func NopWriteCloser(w io.Writer) io.WriteCloser {
 	return nopWriteCloser{w}
 }
 
+type nopReadSeekCloser struct {
+	io.ReadSeeker
+}
+
+func (nopReadSeekCloser) Close() error { return nil }
+
+func NopReadSeekCloser(r io.ReadSeeker) io.ReadSeekCloser {
+	return nopReadSeekCloser{r}
+}
+
 func TestReadWriteCycle(t *testing.T) {
 	t.Run("Base case", func(t *testing.T) {
 		// Generate some test data
@@ -89,7 +99,7 @@ func checkReadWriteCycle(t *testing.T, columns []ColumnDef, rows []Row) {
 	}
 
 	// Read the data back
-	reader, err := NewReader(io.NopCloser(bytes.NewReader(dataBuf.Bytes())), io.NopCloser(bytes.NewReader(metaBuf.Bytes())))
+	reader, err := NewReader(NopReadSeekCloser(bytes.NewReader(dataBuf.Bytes())), NopReadSeekCloser(bytes.NewReader(metaBuf.Bytes())))
 	if err != nil {
 		t.Fatalf("Failed to create reader: %v", err)
 	}

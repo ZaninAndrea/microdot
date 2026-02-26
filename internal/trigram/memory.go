@@ -3,6 +3,7 @@ package trigram
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"slices"
 )
 
@@ -11,41 +12,49 @@ type Trigram [3]byte
 const invalidUTF8 byte = 0xFF
 
 type Posting struct {
-	DocumentID int
-	Position   int
+	DocumentID int64
+	Position   int64
 }
 
-type InvertedIndex struct {
+type MemoryInvertedIndex struct {
 	postingList map[Trigram][]Posting
 }
 
-func NewInvertedIndex() *InvertedIndex {
-	return &InvertedIndex{
+func NewMemoryInvertedIndex() *MemoryInvertedIndex {
+	return &MemoryInvertedIndex{
 		postingList: make(map[Trigram][]Posting),
 	}
 }
 
-func (f *InvertedIndex) Add(documentID int, content string) {
+func (f *MemoryInvertedIndex) Add(documentID int64, content string) {
 	for i, trigram := range getTrigrams(content) {
 		if _, ok := f.postingList[trigram]; !ok {
 			f.postingList[trigram] = make([]Posting, 0)
 		}
 
-		f.postingList[trigram] = append(f.postingList[trigram], Posting{
-			DocumentID: documentID,
-			Position:   i,
-		})
+		postingToInsert := Posting{DocumentID: documentID, Position: int64(i - 2)}
 
-		slices.SortFunc(f.postingList[trigram], comparePosting)
+		insertionIndex, exists := slices.BinarySearchFunc(
+			f.postingList[trigram],
+			postingToInsert,
+			comparePosting,
+		)
+		if exists {
+			continue
+		}
+
+		f.postingList[trigram] = slices.Insert(f.postingList[trigram], insertionIndex, postingToInsert)
 	}
 }
 
 // String returns a human readable representation of the inverted index.
-func (f *InvertedIndex) String() string {
+func (f *MemoryInvertedIndex) String() string {
+	orderedTrigrams := slices.SortedFunc(maps.Keys(f.postingList), compareTrigram)
+
 	var result string
-	for trigram, postings := range f.postingList {
+	for _, trigram := range orderedTrigrams {
 		result += string(trigram[:]) + ": "
-		for _, posting := range postings {
+		for _, posting := range f.postingList[trigram] {
 			result += fmt.Sprintf("%d@%d ", posting.DocumentID, posting.Position)
 		}
 		result += "\n"
@@ -54,7 +63,8 @@ func (f *InvertedIndex) String() string {
 	return result
 }
 
-func (f *InvertedIndex) Search(query string) []int {
+// Search returns the postings matching the given query. For each match the posting of the first trigram is returned.
+func (f *MemoryInvertedIndex) Search(query string) []Posting {
 	trigrams := getTrigrams(query)
 	if len(trigrams) == 0 {
 		return nil
@@ -69,7 +79,7 @@ func (f *InvertedIndex) Search(query string) []int {
 		return nil
 	}
 	if len(trigrams) == 1 {
-		return extractDocumentIDs(pl)
+		return pl
 	}
 
 	// Merge with the posting list of the other trigrams one at a time
@@ -93,12 +103,12 @@ func (f *InvertedIndex) Search(query string) []int {
 				indexA++
 			} else if postingA.DocumentID > postingB.DocumentID {
 				indexB++
-			} else if postingB.Position-postingA.Position < 1 {
+			} else if postingB.Position-postingA.Position < int64(i) {
 				indexB++
-			} else if postingB.Position-postingA.Position > 1 {
+			} else if postingB.Position-postingA.Position > int64(i) {
 				indexA++
 			} else {
-				newResultSet = append(newResultSet, postingB)
+				newResultSet = append(newResultSet, postingA)
 				indexA++
 			}
 		}
@@ -106,7 +116,7 @@ func (f *InvertedIndex) Search(query string) []int {
 		resultSet = newResultSet
 	}
 
-	return extractDocumentIDs(resultSet)
+	return resultSet
 }
 
 func getTrigrams(content string) []Trigram {
@@ -125,17 +135,17 @@ func getTrigrams(content string) []Trigram {
 	return trigrams
 }
 
-func extractDocumentIDs(s []Posting) []int {
-	result := make([]int, len(s))
-	for i, p := range s {
-		result[i] = p.DocumentID
-	}
-	return result
-}
-
 func comparePosting(a, b Posting) int {
 	return cmp.Or(
 		cmp.Compare(a.DocumentID, b.DocumentID),
 		cmp.Compare(a.Position, b.Position),
+	)
+}
+
+func compareTrigram(a, b Trigram) int {
+	return cmp.Or(
+		cmp.Compare(a[0], b[0]),
+		cmp.Compare(a[1], b[1]),
+		cmp.Compare(a[2], b[2]),
 	)
 }

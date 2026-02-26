@@ -9,8 +9,8 @@ import (
 )
 
 type Writer struct {
-	dataFile     structuredWriter
-	metadataFile structuredWriter
+	dataFile     StructuredWriter
+	metadataFile StructuredWriter
 	columns      []ColumnDef
 
 	bufferedRows []Row
@@ -23,8 +23,8 @@ func NewWriter(columns []ColumnDef, dataFile, metadataFile io.WriteCloser) (*Wri
 	}
 
 	writer := &Writer{
-		dataFile:     structuredWriter{w: dataFile},
-		metadataFile: structuredWriter{w: metadataFile},
+		dataFile:     StructuredWriter{w: dataFile},
+		metadataFile: StructuredWriter{w: metadataFile},
 		columns:      columns,
 		bufferedRows: []Row{},
 		blocks:       []blockMetadata{},
