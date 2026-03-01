@@ -16,4 +16,20 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!"})
+	if err != nil {
+		panic(err)
+	}
+	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!"})
+	if err != nil {
+		panic(err)
+	}
+	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!"})
+	if err != nil {
+		panic(err)
+	}
+	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!"})
+	if err != nil {
+		panic(err)
+	}
 }
