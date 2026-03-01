@@ -59,6 +59,15 @@ Le opzioni possono essere:
 - trie or HAT trie
 - bloom filter
 
+Usiamo un unico inverted index per tutti gli stream, teniamo un WAL unico per ricostruire l'inverted index in caso di failure.
+Gli stream vengono inizialmente salvati in un formato non compresso che possiamo scrivere facendo append un record alla volta; poi con il primo merge di due file avviene la compressione per blocchi.
+Durante il primo merge vengono inferite le colonne presenti nello stream e
+
+Oltre ai valori di una colonna viene salvata una bitmap che indica quali valori sono null. Nel blocco che codifica i valori vengono codificati solo quelli non null. Durante la decodifica bisogna utilizzare la bitmap per sapere a che indice corrisponde ciascun valore.
+Le bitmap sono compresse con roaring bitmaps.
+
+Potrei usare le bitmap anche per rappressentare le posting list.
+
 === Bloom filter
 bloom filter per saltare tutti i blocchi che non contengono una parola/trigram
 
@@ -109,7 +118,7 @@ Con questa soluzione il cutoff per quando passare da inverted index a bloom filt
     - Float: the Float compression algorithm of Gorilla
     - Integer: Delta Encoding + Zigzag Conversion + RLE / Simple8b / None
     - String: Snappy Compression
-    - Boolean: Bit packing
+    - Boolean: Bit packing. Roaring bitmaps
   - LZ4 encoding
 
 = Memory management
