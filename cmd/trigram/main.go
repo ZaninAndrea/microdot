@@ -7,26 +7,17 @@ import (
 )
 
 func main() {
-	ii := trigram.NewMemoryInvertedIndex()
-	ii.Add(1, "hello world")
-	ii.Add(2, "ciao mondo")
-
-	err := trigram.WriteToDiskFS(ii, "./tmp", "test")
+	index, err := trigram.NewIndex("./tmp")
 	if err != nil {
 		panic(err)
 	}
+	defer index.Close()
 
-	dii, err := trigram.OpenDiskInvertedIndexFS("./tmp", "test")
-	if err != nil {
-		panic(err)
+	index.Add(1, "hello world")
+	for i := 2; i < 10; i++ {
+		index.Add(int64(i), fmt.Sprintf("document %d content", i))
 	}
 
-	ii, err = dii.LoadAll()
-	if err != nil {
-		panic(err)
-	}
+	fmt.Println(index.Search("llo worl"))
 
-	fmt.Println(ii.String())
-	fmt.Println("--------")
-	fmt.Println(ii.Search("llo wo"))
 }

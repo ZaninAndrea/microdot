@@ -50,7 +50,10 @@ func TestDiskInvertedIndex(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		postings := loadedIndex.Search(test.query)
+		postings, err := search(test.query, loadedIndex)
+		if err != nil {
+			t.Fatalf("Failed to search for query %q: %v", test.query, err)
+		}
 		var docIDs []int64
 		for _, p := range postings {
 			docIDs = append(docIDs, p.DocumentID)
@@ -96,7 +99,10 @@ func TestDiskInvertedIndex_LargeData(t *testing.T) {
 	}
 
 	// Search for the common word
-	postings := loadedIndex.Search("commonword")
+	postings, err := search("commonword", loadedIndex)
+	if err != nil {
+		t.Fatalf("Failed to search for 'commonword': %v", err)
+	}
 	if len(postings) != count {
 		t.Errorf("Expected %d results for 'commonword', got %d", count, len(postings))
 	}
