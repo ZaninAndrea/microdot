@@ -20,10 +20,10 @@ type Posting struct {
 
 // Index is a trigram index implemented as an LSM tree.
 type Index struct {
-	mem        *memoryInvertedIndex
+	mem        *memoryIndex
 	memEntries int
 
-	disks       cache.LRU[string, *diskInvertedIndex]
+	disks       cache.LRU[string, *diskIndex]
 	baseFolder  string
 	diskEntries []string
 }
@@ -46,14 +46,14 @@ func NewIndex(baseFolder string) (*Index, error) {
 
 	disks := *cache.NewLRU(
 		INDEX_CACHE_SIZE,
-		func(name string) (*diskInvertedIndex, error) {
-			return openDiskInvertedIndexFS(baseFolder, name)
+		func(name string) (*diskIndex, error) {
+			return openDiskIndexFS(baseFolder, name)
 		},
-		func(d *diskInvertedIndex) { d.Close() },
+		func(d *diskIndex) { d.Close() },
 	)
 
 	return &Index{
-		mem:         NewMemoryInvertedIndex(),
+		mem:         newMemoryIndex(),
 		baseFolder:  baseFolder,
 		diskEntries: diskEntries,
 		disks:       disks,
@@ -86,7 +86,7 @@ func (i *Index) flushMemIndex() error {
 		return err
 	}
 
-	i.mem = NewMemoryInvertedIndex()
+	i.mem = newMemoryIndex()
 	i.memEntries = 0
 	i.diskEntries = append(i.diskEntries, name)
 	return nil

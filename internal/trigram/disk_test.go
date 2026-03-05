@@ -15,7 +15,7 @@ func TestDiskInvertedIndex(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	// Create and populate the index
-	index := NewMemoryInvertedIndex()
+	index := newMemoryIndex()
 	index.Add(1, "hello world")
 	index.Add(2, "hello universe")
 	index.Add(3, "world peace")
@@ -27,7 +27,7 @@ func TestDiskInvertedIndex(t *testing.T) {
 	}
 
 	// Load the index from disk
-	diskIndex, err := openDiskInvertedIndexFS(tempDir, indexName)
+	diskIndex, err := openDiskIndexFS(tempDir, indexName)
 	if err != nil {
 		t.Fatalf("Failed to open disk inverted index: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestDiskInvertedIndex_LargeData(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	index := NewMemoryInvertedIndex()
+	index := newMemoryIndex()
 
 	// Add enough data to trigger multiple blocks
 	count := POSTING_BLOCK_SIZE * 3
@@ -89,7 +89,7 @@ func TestDiskInvertedIndex_LargeData(t *testing.T) {
 		t.Fatalf("Failed to write large index to disk: %v", err)
 	}
 
-	diskIndex, err := openDiskInvertedIndexFS(tempDir, indexName)
+	diskIndex, err := openDiskIndexFS(tempDir, indexName)
 	if err != nil {
 		t.Fatalf("Failed to open disk inverted index: %v", err)
 	}
