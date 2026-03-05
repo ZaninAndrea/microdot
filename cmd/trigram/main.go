@@ -11,11 +11,17 @@ func main() {
 	ii.Add(1, "hello world")
 	ii.Add(2, "ciao mondo")
 
-	err := ii.WriteToDiskFS("./tmp", "test")
+	err := trigram.WriteToDiskFS(ii, "./tmp", "test")
 	if err != nil {
 		panic(err)
 	}
-	ii, err = trigram.LoadFromDiskFS("./tmp", "test")
+
+	dii, err := trigram.OpenDiskInvertedIndexFS("./tmp", "test")
+	if err != nil {
+		panic(err)
+	}
+
+	ii, err = dii.LoadAll()
 	if err != nil {
 		panic(err)
 	}

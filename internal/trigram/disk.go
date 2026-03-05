@@ -33,7 +33,157 @@ The postings are encoded in POSTING_BLOCK_SIZE blocks using delta-of-delta.
 const FORMAT_VERSION = 1
 const POSTING_BLOCK_SIZE = 1024
 
-func (f *MemoryInvertedIndex) WriteToDiskFS(folder, name string) error {
+type DiskInvertedIndex struct {
+	dataReader     *archive.StructuredReader
+	metadataReader *archive.StructuredReader
+
+	metadata map[Trigram][]blockMetadata
+}
+
+type blockMetadata struct {
+	postingsCount uint64
+	blockOffset   uint64
+}
+
+func OpenDiskInvertedIndexFS(folder string, name string) (*DiskInvertedIndex, error) {
+	// Open the data and metadata files for reading
+	dataFile, err := os.Open(path.Join(folder, name+".data.bin"))
+	if err != nil {
+		return nil, err
+	}
+
+	metadataFile, err := os.Open(path.Join(folder, name+".metadata.bin"))
+	if err != nil {
+		return nil, err
+	}
+
+	return OpenDiskInvertedIndex(dataFile, metadataFile)
+}
+
+func OpenDiskInvertedIndex(dataFile, metadataFile io.ReadSeekCloser) (*DiskInvertedIndex, error) {
+	index := &DiskInvertedIndex{dataReader: archive.NewStructuredReader(dataFile), metadataReader: archive.NewStructuredReader(metadataFile)}
+	if err := index.loadMetadata(); err != nil {
+		return nil, err
+	}
+	return index, nil
+}
+
+func (d *DiskInvertedIndex) loadMetadata() error {
+	// Read the format version and trigram count from the metadata file
+	formatVersion, err := d.metadataReader.ReadUInt32()
+	if err != nil {
+		return err
+	}
+	if formatVersion != FORMAT_VERSION {
+		return errors.New("unsupported format version")
+	}
+
+	// Read the trigram count from the metadata file
+	trigramCount, err := d.metadataReader.ReadUvarint()
+	if err != nil {
+		return err
+	}
+
+	// For each trigram, read the trigram and the block metadata (number of postings and offset)
+	d.metadata = make(map[Trigram][]blockMetadata)
+	for i := uint64(0); i < trigramCount; i++ {
+		var trigram [3]byte
+		if _, err := d.metadataReader.Read(trigram[:]); err != nil {
+			return err
+		}
+
+		blockCount, err := d.metadataReader.ReadUvarint()
+		if err != nil {
+			return err
+		}
+
+		var blocks []blockMetadata
+		for j := uint64(0); j < blockCount; j++ {
+			postingCount, err := d.metadataReader.ReadUvarint()
+			if err != nil {
+				return err
+			}
+
+			blockOffset, err := d.metadataReader.ReadUvarint()
+			if err != nil {
+				return err
+			}
+
+			blocks = append(blocks, blockMetadata{postingsCount: postingCount, blockOffset: blockOffset})
+		}
+
+		d.metadata[Trigram(trigram)] = blocks
+	}
+
+	return nil
+}
+
+func (d *DiskInvertedIndex) GetPostings(trigram Trigram) ([]Posting, error) {
+	blocks, ok := d.metadata[trigram]
+	if !ok {
+		return nil, nil
+	}
+
+	var postings []Posting
+	for _, block := range blocks {
+		blockPostings, err := d.readPostingsBlock(block)
+		if err != nil {
+			return nil, err
+		}
+		postings = append(postings, blockPostings...)
+	}
+
+	return postings, nil
+}
+
+func (d *DiskInvertedIndex) LoadAll() (*MemoryInvertedIndex, error) {
+	postingList := make(map[Trigram][]Posting)
+	for trigram, blocks := range d.metadata {
+		var postings []Posting
+		for _, block := range blocks {
+			blockPostings, err := d.readPostingsBlock(block)
+			if err != nil {
+				return nil, err
+			}
+			postings = append(postings, blockPostings...)
+		}
+		postingList[trigram] = postings
+	}
+
+	return &MemoryInvertedIndex{postingList: postingList}, nil
+}
+
+func (d *DiskInvertedIndex) readPostingsBlock(block blockMetadata) ([]Posting, error) {
+	// Seek to the block offset in the data file
+	if _, err := d.dataReader.Seek(int64(block.blockOffset), io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	// Read the postings in the block using the delta-of-delta decoder
+	var postings []Posting
+	decoder := &compression.DeltaOfDeltaPairDecoder{Reader: d.dataReader}
+	for k := uint64(0); k < block.postingsCount; k++ {
+		pair, err := decoder.Decode()
+		if err != nil {
+			return nil, err
+		}
+		postings = append(postings, Posting{DocumentID: pair[0], Position: pair[1]})
+	}
+
+	return postings, nil
+}
+
+func (d *DiskInvertedIndex) Close() error {
+	if err := d.dataReader.Close(); err != nil {
+		return err
+	}
+	if err := d.metadataReader.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func WriteToDiskFS(indexToWrite *MemoryInvertedIndex, folder, name string) error {
 	// Open the data and metadata files for writing
 	dataFile, err := os.Create(path.Join(folder, name+".data.bin"))
 	if err != nil {
@@ -44,10 +194,10 @@ func (f *MemoryInvertedIndex) WriteToDiskFS(folder, name string) error {
 	if err != nil {
 		return err
 	}
-	return f.WriteToDisk(dataFile, metadataFile)
+	return WriteToDisk(indexToWrite, dataFile, metadataFile)
 }
 
-func (f *MemoryInvertedIndex) WriteToDisk(dataFile, metadataFile io.WriteCloser) error {
+func WriteToDisk(indexToWrite *MemoryInvertedIndex, dataFile, metadataFile io.WriteCloser) error {
 	dataWriter := archive.NewStructuredWriter(dataFile)
 	metadataWriter := archive.NewStructuredWriter(metadataFile)
 
@@ -58,12 +208,12 @@ func (f *MemoryInvertedIndex) WriteToDisk(dataFile, metadataFile io.WriteCloser)
 	if err := metadataWriter.WriteUInt32(FORMAT_VERSION); err != nil {
 		return err
 	}
-	if err := metadataWriter.WriteUvarint(uint64(len(f.postingList))); err != nil {
+	if err := metadataWriter.WriteUvarint(uint64(len(indexToWrite.postingList))); err != nil {
 		return err
 	}
 
 	// Write the trigram data one by one
-	for trigram, postings := range f.postingList {
+	for trigram, postings := range indexToWrite.postingList {
 		// Write the trigram (3 bytes)
 		if _, err := metadataWriter.Write(trigram[:]); err != nil {
 			return err
@@ -99,85 +249,4 @@ func (f *MemoryInvertedIndex) WriteToDisk(dataFile, metadataFile io.WriteCloser)
 	}
 
 	return nil
-}
-
-func LoadFromDiskFS(folder, name string) (*MemoryInvertedIndex, error) {
-	// Open the data and metadata files for reading
-	dataFile, err := os.Open(path.Join(folder, name+".data.bin"))
-	if err != nil {
-		return nil, err
-	}
-
-	metadataFile, err := os.Open(path.Join(folder, name+".metadata.bin"))
-	if err != nil {
-		return nil, err
-	}
-	defer dataFile.Close()
-	defer metadataFile.Close()
-
-	return LoadFromDisk(dataFile, metadataFile)
-}
-
-func LoadFromDisk(dataFile, metadataFile io.ReadSeekCloser) (*MemoryInvertedIndex, error) {
-	dataReader := archive.NewStructuredReader(dataFile)
-	metadataReader := archive.NewStructuredReader(metadataFile)
-
-	// Read the format version and trigram count from the metadata file
-	formatVersion, err := metadataReader.ReadUInt32()
-	if err != nil {
-		return nil, err
-	}
-	if formatVersion != FORMAT_VERSION {
-		return nil, errors.New("unsupported format version")
-	}
-
-	trigramCount, err := metadataReader.ReadUvarint()
-	if err != nil {
-		return nil, err
-	}
-
-	// Read the trigram data one by one
-	postingList := make(map[Trigram][]Posting)
-	for i := uint64(0); i < trigramCount; i++ {
-		var trigram [3]byte
-		if _, err := metadataReader.Read(trigram[:]); err != nil {
-			return nil, err
-		}
-
-		blockCount, err := metadataReader.ReadUvarint()
-		if err != nil {
-			return nil, err
-		}
-
-		var postings []Posting
-		for j := uint64(0); j < blockCount; j++ {
-			postingCount, err := metadataReader.ReadUvarint()
-			if err != nil {
-				return nil, err
-			}
-
-			blockOffset, err := metadataReader.ReadUvarint()
-			if err != nil {
-				return nil, err
-			}
-
-			// Seek to the block offset in the data file and read the block data
-			if _, err := dataReader.Seek(int64(blockOffset), io.SeekStart); err != nil {
-				return nil, err
-			}
-
-			decoder := &compression.DeltaOfDeltaPairDecoder{Reader: dataReader}
-			for k := uint64(0); k < postingCount; k++ {
-				pair, err := decoder.Decode()
-				if err != nil {
-					return nil, err
-				}
-				postings = append(postings, Posting{DocumentID: pair[0], Position: pair[1]})
-			}
-		}
-
-		postingList[trigram] = postings
-	}
-
-	return &MemoryInvertedIndex{postingList: postingList}, nil
 }

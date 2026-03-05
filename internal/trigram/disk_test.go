@@ -22,12 +22,17 @@ func TestDiskInvertedIndex(t *testing.T) {
 
 	// Write the index to disk
 	indexName := "test_index"
-	if err := index.WriteToDiskFS(tempDir, indexName); err != nil {
+	if err := WriteToDiskFS(index, tempDir, indexName); err != nil {
 		t.Fatalf("Failed to write index to disk: %v", err)
 	}
 
 	// Load the index from disk
-	loadedIndex, err := LoadFromDiskFS(tempDir, indexName)
+	diskIndex, err := OpenDiskInvertedIndexFS(tempDir, indexName)
+	if err != nil {
+		t.Fatalf("Failed to open disk inverted index: %v", err)
+	}
+
+	loadedIndex, err := diskIndex.LoadAll()
 	if err != nil {
 		t.Fatalf("Failed to load index from disk: %v", err)
 	}
@@ -77,11 +82,15 @@ func TestDiskInvertedIndex_LargeData(t *testing.T) {
 	}
 
 	indexName := "large_index"
-	if err := index.WriteToDiskFS(tempDir, indexName); err != nil {
+	if err := WriteToDiskFS(index, tempDir, indexName); err != nil {
 		t.Fatalf("Failed to write large index to disk: %v", err)
 	}
 
-	loadedIndex, err := LoadFromDiskFS(tempDir, indexName)
+	diskIndex, err := OpenDiskInvertedIndexFS(tempDir, indexName)
+	if err != nil {
+		t.Fatalf("Failed to open disk inverted index: %v", err)
+	}
+	loadedIndex, err := diskIndex.LoadAll()
 	if err != nil {
 		t.Fatalf("Failed to load large index from disk: %v", err)
 	}
