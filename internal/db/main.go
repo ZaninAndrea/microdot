@@ -2,6 +2,8 @@ package db
 
 import (
 	"fmt"
+	"os"
+	"path"
 	"time"
 
 	"github.com/ZaninAndrea/microdot/internal/trigram"
@@ -9,23 +11,42 @@ import (
 
 type DB struct {
 	wal          *WAL
-	trigramIndex *trigram.MemoryInvertedIndex
+	trigramIndex *trigram.Index
 
 	bufferManager *bufferManager
 }
 
-func NewDB(walPath string, streamsPath string) (*DB, error) {
-	wal, err := NewWAL(walPath)
+func NewDB(basePath string) (*DB, error) {
+	walFolder := path.Join(basePath, "wal")
+	err := os.MkdirAll(walFolder, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
+	wal, err := NewWAL(walFolder)
 	if err != nil {
 		return nil, err
 	}
 
-	trigramIndex := trigram.NewMemoryInvertedIndex()
+	trigramFolder := path.Join(basePath, "trigram")
+	err = os.MkdirAll(trigramFolder, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
+	trigramIndex, err := trigram.NewIndex(trigramFolder)
+	if err != nil {
+		return nil, err
+	}
+
+	streamsFolder := path.Join(basePath, "streams")
+	err = os.MkdirAll(streamsFolder, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
 
 	return &DB{
 		wal:           wal,
 		trigramIndex:  trigramIndex,
-		bufferManager: newBufferManager(streamsPath),
+		bufferManager: newBufferManager(streamsFolder),
 	}, nil
 }
 
@@ -60,4 +81,11 @@ func (d *DB) AddDocument(streamLabels Labels, data map[string]any) error {
 
 func (d *DB) Query(streamLabels Labels, query string) ([]map[string]any, error) {
 	return nil, nil
+}
+
+func (d *DB) Close() error {
+	if err := d.trigramIndex.Close(); err != nil {
+		return err
+	}
+	return nil
 }

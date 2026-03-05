@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -137,7 +138,16 @@ func (w *Writer) writeChunk() error {
 func (w *Writer) writeInt64Column(rows []Row, columnIndex int) error {
 	values := make([]int64, len(rows))
 	for i, row := range rows {
-		values[i] = row[columnIndex].(int64)
+		switch v := row[columnIndex].(type) {
+		case float64:
+			values[i] = int64(v)
+		case int, int8, int16, int32, int64:
+			values[i] = v.(int64)
+		case uint, uint8, uint16, uint32, uint64:
+			values[i] = int64(v.(uint64))
+		default:
+			return fmt.Errorf("invalid value type for int64 column: %T", row[columnIndex])
+		}
 	}
 	encoded := compression.EncodeDeltaOfDelta(values)
 

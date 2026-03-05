@@ -33,11 +33,11 @@ The postings are encoded in POSTING_BLOCK_SIZE blocks using delta-of-delta.
 const FORMAT_VERSION = 1
 const POSTING_BLOCK_SIZE = 1024
 
-type DiskInvertedIndex struct {
+type diskInvertedIndex struct {
 	dataReader     *archive.StructuredReader
 	metadataReader *archive.StructuredReader
 
-	metadata map[Trigram][]blockMetadata
+	metadata map[trigram][]blockMetadata
 }
 
 type blockMetadata struct {
@@ -45,7 +45,7 @@ type blockMetadata struct {
 	blockOffset   uint64
 }
 
-func OpenDiskInvertedIndexFS(folder string, name string) (*DiskInvertedIndex, error) {
+func openDiskInvertedIndexFS(folder string, name string) (*diskInvertedIndex, error) {
 	// Open the data and metadata files for reading
 	dataFile, err := os.Open(path.Join(folder, name+".data.bin"))
 	if err != nil {
@@ -60,15 +60,15 @@ func OpenDiskInvertedIndexFS(folder string, name string) (*DiskInvertedIndex, er
 	return OpenDiskInvertedIndex(dataFile, metadataFile)
 }
 
-func OpenDiskInvertedIndex(dataFile, metadataFile io.ReadSeekCloser) (*DiskInvertedIndex, error) {
-	index := &DiskInvertedIndex{dataReader: archive.NewStructuredReader(dataFile), metadataReader: archive.NewStructuredReader(metadataFile)}
+func OpenDiskInvertedIndex(dataFile, metadataFile io.ReadSeekCloser) (*diskInvertedIndex, error) {
+	index := &diskInvertedIndex{dataReader: archive.NewStructuredReader(dataFile), metadataReader: archive.NewStructuredReader(metadataFile)}
 	if err := index.loadMetadata(); err != nil {
 		return nil, err
 	}
 	return index, nil
 }
 
-func (d *DiskInvertedIndex) loadMetadata() error {
+func (d *diskInvertedIndex) loadMetadata() error {
 	// Read the format version and trigram count from the metadata file
 	formatVersion, err := d.metadataReader.ReadUInt32()
 	if err != nil {
@@ -85,10 +85,10 @@ func (d *DiskInvertedIndex) loadMetadata() error {
 	}
 
 	// For each trigram, read the trigram and the block metadata (number of postings and offset)
-	d.metadata = make(map[Trigram][]blockMetadata)
+	d.metadata = make(map[trigram][]blockMetadata)
 	for i := uint64(0); i < trigramCount; i++ {
-		var trigram [3]byte
-		if _, err := d.metadataReader.Read(trigram[:]); err != nil {
+		var tr [3]byte
+		if _, err := d.metadataReader.Read(tr[:]); err != nil {
 			return err
 		}
 
@@ -112,13 +112,13 @@ func (d *DiskInvertedIndex) loadMetadata() error {
 			blocks = append(blocks, blockMetadata{postingsCount: postingCount, blockOffset: blockOffset})
 		}
 
-		d.metadata[Trigram(trigram)] = blocks
+		d.metadata[trigram(tr)] = blocks
 	}
 
 	return nil
 }
 
-func (d *DiskInvertedIndex) GetPostings(trigram Trigram) ([]Posting, error) {
+func (d *diskInvertedIndex) GetPostings(trigram trigram) ([]Posting, error) {
 	blocks, ok := d.metadata[trigram]
 	if !ok {
 		return nil, nil
@@ -136,8 +136,8 @@ func (d *DiskInvertedIndex) GetPostings(trigram Trigram) ([]Posting, error) {
 	return postings, nil
 }
 
-func (d *DiskInvertedIndex) LoadAll() (*MemoryInvertedIndex, error) {
-	postingList := make(map[Trigram][]Posting)
+func (d *diskInvertedIndex) LoadAll() (*memoryInvertedIndex, error) {
+	postingList := make(map[trigram][]Posting)
 	for trigram, blocks := range d.metadata {
 		var postings []Posting
 		for _, block := range blocks {
@@ -150,10 +150,10 @@ func (d *DiskInvertedIndex) LoadAll() (*MemoryInvertedIndex, error) {
 		postingList[trigram] = postings
 	}
 
-	return &MemoryInvertedIndex{postingList: postingList}, nil
+	return &memoryInvertedIndex{postingList: postingList}, nil
 }
 
-func (d *DiskInvertedIndex) readPostingsBlock(block blockMetadata) ([]Posting, error) {
+func (d *diskInvertedIndex) readPostingsBlock(block blockMetadata) ([]Posting, error) {
 	// Seek to the block offset in the data file
 	if _, err := d.dataReader.Seek(int64(block.blockOffset), io.SeekStart); err != nil {
 		return nil, err
@@ -173,7 +173,7 @@ func (d *DiskInvertedIndex) readPostingsBlock(block blockMetadata) ([]Posting, e
 	return postings, nil
 }
 
-func (d *DiskInvertedIndex) Close() error {
+func (d *diskInvertedIndex) Close() error {
 	if err := d.dataReader.Close(); err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func (d *DiskInvertedIndex) Close() error {
 	return nil
 }
 
-func WriteToDiskFS(indexToWrite *MemoryInvertedIndex, folder, name string) error {
+func writeToDiskFS(indexToWrite *memoryInvertedIndex, folder, name string) error {
 	// Open the data and metadata files for writing
 	dataFile, err := os.Create(path.Join(folder, name+".data.bin"))
 	if err != nil {
@@ -194,10 +194,10 @@ func WriteToDiskFS(indexToWrite *MemoryInvertedIndex, folder, name string) error
 	if err != nil {
 		return err
 	}
-	return WriteToDisk(indexToWrite, dataFile, metadataFile)
+	return writeToDisk(indexToWrite, dataFile, metadataFile)
 }
 
-func WriteToDisk(indexToWrite *MemoryInvertedIndex, dataFile, metadataFile io.WriteCloser) error {
+func writeToDisk(indexToWrite *memoryInvertedIndex, dataFile, metadataFile io.WriteCloser) error {
 	dataWriter := archive.NewStructuredWriter(dataFile)
 	metadataWriter := archive.NewStructuredWriter(metadataFile)
 

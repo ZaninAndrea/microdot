@@ -4,7 +4,7 @@ package trigram
 func search(
 	query string,
 	index interface {
-		GetPostings(Trigram) ([]Posting, error)
+		GetPostings(trigram) ([]Posting, error)
 	},
 ) ([]Posting, error) {
 	trigrams := getTrigrams(query)
@@ -61,11 +61,11 @@ func search(
 	return resultSet, nil
 }
 
-func getTrigrams(content string) []Trigram {
+func getTrigrams(content string) []trigram {
 	bytes := append([]byte(content), invalidUTF8, invalidUTF8)
 
-	trigrams := make([]Trigram, 0, len(content))
-	var currentTrigram Trigram = [3]byte{invalidUTF8, invalidUTF8, invalidUTF8}
+	trigrams := make([]trigram, 0, len(content))
+	var currentTrigram trigram = [3]byte{invalidUTF8, invalidUTF8, invalidUTF8}
 	for i := 0; i < len(bytes); i++ {
 		currentTrigram[0] = currentTrigram[1]
 		currentTrigram[1] = currentTrigram[2]

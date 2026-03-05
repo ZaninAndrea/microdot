@@ -121,6 +121,8 @@ Con questa soluzione il cutoff per quando passare da inverted index a bloom filt
     - Boolean: Bit packing. Roaring bitmaps
   - LZ4 encoding
 
+Il numero di righe in un blocco potrebbe essere più grande per i file che contengono log vecchi, così da migliorare la compressione al costo di una lettura più lenta (che però non è un grosso problema perché i log vecchi vengono letti meno spesso).
+
 = Memory management
 Dovrebbe esserci una buffer pool globale che eroga buffer in memory fino ad un limite stabilito nella configurazione del database (o inferito da request/limit di k8s), poi passa ad erogare disk-backed buffers
 - Potrebbe esserci anche una gestione della priority se necessario, in modo da dare gli in-memory buffers preferenzialmente ai bottleneck di performance

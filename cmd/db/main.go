@@ -3,10 +3,11 @@ package main
 import "github.com/ZaninAndrea/microdot/internal/db"
 
 func main() {
-	myDB, err := db.NewDB("./tmp/wal", "./tmp/streams")
+	myDB, err := db.NewDB("./tmp")
 	if err != nil {
 		panic(err)
 	}
+	defer myDB.Close()
 
 	err = myDB.AddDocument(db.Labels{"stream": "example"}, map[string]any{"msg": "Hello, World!"})
 	if err != nil {

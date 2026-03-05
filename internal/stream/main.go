@@ -172,7 +172,7 @@ func (s *Stream) compressWAL() error {
 
 	// Pass through the WAL file again to write the compressed version
 	writer, err := archive.NewWriterFS(
-		slices.Collect(maps.Values(columns)),
+		columns,
 		s.rootPath,
 		fmt.Sprintf("%x", s.labelsHash),
 	)
@@ -216,7 +216,7 @@ func (s *Stream) compressWAL() error {
 	return os.Remove(walFilePath)
 }
 
-func inferColumns(wal *os.File) (map[string]archive.ColumnDef, error) {
+func inferColumns(wal *os.File) ([]archive.ColumnDef, error) {
 	columns := make(map[string]archive.ColumnDef)
 	scanner := bufio.NewScanner(wal)
 	for scanner.Scan() {
@@ -261,7 +261,7 @@ func inferColumns(wal *os.File) (map[string]archive.ColumnDef, error) {
 		return nil, err
 	}
 
-	return columns, nil
+	return slices.Collect(maps.Values(columns)), nil
 }
 
 func (s *Stream) Close() error {

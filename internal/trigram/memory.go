@@ -5,17 +5,17 @@ import (
 	"slices"
 )
 
-type MemoryInvertedIndex struct {
-	postingList map[Trigram][]Posting
+type memoryInvertedIndex struct {
+	postingList map[trigram][]Posting
 }
 
-func NewMemoryInvertedIndex() *MemoryInvertedIndex {
-	return &MemoryInvertedIndex{
-		postingList: make(map[Trigram][]Posting),
+func NewMemoryInvertedIndex() *memoryInvertedIndex {
+	return &memoryInvertedIndex{
+		postingList: make(map[trigram][]Posting),
 	}
 }
 
-func (f *MemoryInvertedIndex) Add(documentID int64, content string) {
+func (f *memoryInvertedIndex) Add(documentID int64, content string) {
 	for i, trigram := range getTrigrams(content) {
 		if _, ok := f.postingList[trigram]; !ok {
 			f.postingList[trigram] = make([]Posting, 0)
@@ -36,7 +36,7 @@ func (f *MemoryInvertedIndex) Add(documentID int64, content string) {
 	}
 }
 
-func (f *MemoryInvertedIndex) GetPostings(trigram Trigram) ([]Posting, error) {
+func (f *memoryInvertedIndex) GetPostings(trigram trigram) ([]Posting, error) {
 	postings, ok := f.postingList[trigram]
 	if !ok {
 		return nil, nil

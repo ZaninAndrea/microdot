@@ -9,7 +9,7 @@ import (
 	"github.com/ZaninAndrea/microdot/pkg/cache"
 )
 
-type Trigram [3]byte
+type trigram [3]byte
 
 const invalidUTF8 byte = 0xFF
 
@@ -18,11 +18,12 @@ type Posting struct {
 	Position   int64
 }
 
+// Index is a trigram index implemented as an LSM tree.
 type Index struct {
-	mem        *MemoryInvertedIndex
+	mem        *memoryInvertedIndex
 	memEntries int
 
-	disks       cache.LRU[string, *DiskInvertedIndex]
+	disks       cache.LRU[string, *diskInvertedIndex]
 	baseFolder  string
 	diskEntries []string
 }
@@ -45,10 +46,10 @@ func NewIndex(baseFolder string) (*Index, error) {
 
 	disks := *cache.NewLRU(
 		INDEX_CACHE_SIZE,
-		func(name string) (*DiskInvertedIndex, error) {
-			return OpenDiskInvertedIndexFS(baseFolder, name)
+		func(name string) (*diskInvertedIndex, error) {
+			return openDiskInvertedIndexFS(baseFolder, name)
 		},
-		func(d *DiskInvertedIndex) { d.Close() },
+		func(d *diskInvertedIndex) { d.Close() },
 	)
 
 	return &Index{
@@ -80,7 +81,7 @@ func (i *Index) flushMemIndex() error {
 
 	name := fmt.Sprintf("%d", time.Now().UnixNano())
 
-	err := WriteToDiskFS(i.mem, i.baseFolder, name)
+	err := writeToDiskFS(i.mem, i.baseFolder, name)
 	if err != nil {
 		return err
 	}
