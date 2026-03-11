@@ -183,7 +183,12 @@ func (d *diskIndex) Close() error {
 	return nil
 }
 
-func writeToDiskFS(indexToWrite *memoryIndex, folder, name string) error {
+type indexStore interface {
+	ListTrigrams() []trigram
+	GetPostings(trigram trigram) ([]Posting, error)
+}
+
+func writeToDiskFS(indexToWrite indexStore, folder, name string) error {
 	// Open the data and metadata files for writing
 	dataFile, err := os.Create(path.Join(folder, name+".data.bin"))
 	if err != nil {
@@ -197,23 +202,30 @@ func writeToDiskFS(indexToWrite *memoryIndex, folder, name string) error {
 	return writeToDisk(indexToWrite, dataFile, metadataFile)
 }
 
-func writeToDisk(indexToWrite *memoryIndex, dataFile, metadataFile io.WriteCloser) error {
+func writeToDisk(indexToWrite indexStore, dataFile, metadataFile io.WriteCloser) error {
 	dataWriter := archive.NewStructuredWriter(dataFile)
 	metadataWriter := archive.NewStructuredWriter(metadataFile)
 
 	defer dataFile.Close()
 	defer metadataFile.Close()
 
+	trigrams := indexToWrite.ListTrigrams()
+
 	// Write the format version and trigram count to the metadata file
 	if err := metadataWriter.WriteUInt32(FORMAT_VERSION); err != nil {
 		return err
 	}
-	if err := metadataWriter.WriteUvarint(uint64(len(indexToWrite.postingList))); err != nil {
+	if err := metadataWriter.WriteUvarint(uint64(len(trigrams))); err != nil {
 		return err
 	}
 
 	// Write the trigram data one by one
-	for trigram, postings := range indexToWrite.postingList {
+	for _, trigram := range trigrams {
+		postings, err := indexToWrite.GetPostings(trigram)
+		if err != nil {
+			return err
+		}
+
 		// Write the trigram (3 bytes)
 		if _, err := metadataWriter.Write(trigram[:]); err != nil {
 			return err

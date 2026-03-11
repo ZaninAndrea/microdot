@@ -21,7 +21,7 @@ const (
 	MAX_WAL_LOGS = 3
 )
 
-type WAL struct {
+type wal struct {
 	rootPath   string
 	labelsHash uint64
 
@@ -29,8 +29,8 @@ type WAL struct {
 	logCount int
 }
 
-func NewWAL(labelsHash uint64, rootPath string) (*WAL, error) {
-	w := &WAL{
+func newWAL(labelsHash uint64, rootPath string) (*wal, error) {
+	w := &wal{
 		labelsHash: labelsHash,
 		rootPath:   rootPath,
 	}
@@ -42,7 +42,7 @@ func NewWAL(labelsHash uint64, rootPath string) (*WAL, error) {
 	return w, nil
 }
 
-func (w *WAL) Open() error {
+func (w *wal) Open() error {
 	walFilePath := w.filePath()
 
 	// If the WAL file doesn't exist, create it. Otherwise, open it for appending.
@@ -51,7 +51,7 @@ func (w *WAL) Open() error {
 			return err
 		}
 
-		f, err := os.OpenFile(walFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		f, err := os.OpenFile(walFilePath, os.O_APPEND|os.O_CREATE, 0644)
 		if err != nil {
 			return err
 		}
@@ -60,23 +60,23 @@ func (w *WAL) Open() error {
 		w.logCount = 0
 		return nil
 	} else {
-		logCount, err := countFileLines(walFilePath)
-		if err != nil {
-			return err
-		}
-		w.logCount = logCount
-
-		f, err := os.OpenFile(walFilePath, os.O_APPEND|os.O_WRONLY, 0644)
+		f, err := os.OpenFile(walFilePath, os.O_APPEND, 0644)
 		if err != nil {
 			return err
 		}
 		w.file = f
 
+		logCount, err := w.countFileLines()
+		if err != nil {
+			return err
+		}
+		w.logCount = logCount
+
 		return nil
 	}
 }
 
-func (w *WAL) Append(data map[string]any) error {
+func (w *wal) Append(data map[string]any) error {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return err
@@ -93,32 +93,20 @@ func (w *WAL) Append(data map[string]any) error {
 	return nil
 }
 
-func (w *WAL) ConsolidateData() ([]archive.ColumnDef, iter.Seq[containers.Result[archive.Row]], error) {
-	// Close the WAL file in write mode
-	err := w.Close()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Reopen the WAL file in read mode
-	wal, err := os.OpenFile(w.filePath(), os.O_RDONLY, 0644)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer wal.Close()
-
-	columns, err := inferColumns(wal)
+// ConsolidateData reads all entries from the WAL, infers the column definitions, and returns an iterator over the rows.
+func (w *wal) ConsolidateData() ([]archive.ColumnDef, iter.Seq[containers.Result[archive.Row]], error) {
+	columns, err := w.inferColumns()
 	if err != nil {
 		return nil, nil, err
 	}
 
 	rowIter := func(yield func(containers.Result[archive.Row]) bool) {
-		if _, err := wal.Seek(0, io.SeekStart); err != nil {
+		if _, err := w.file.Seek(0, io.SeekStart); err != nil {
 			yield(containers.Err[archive.Row](err))
 			return
 		}
 
-		scanner := bufio.NewScanner(wal)
+		scanner := bufio.NewScanner(w.file)
 		for scanner.Scan() {
 			var doc map[string]any
 			err := json.Unmarshal(scanner.Bytes(), &doc)
@@ -147,60 +135,91 @@ func (w *WAL) ConsolidateData() ([]archive.ColumnDef, iter.Seq[containers.Result
 	return columns, rowIter, nil
 }
 
-func (w *WAL) Close() error {
+func (w *wal) Close() error {
 	if w.file == nil {
 		return nil
 	}
 	return w.file.Close()
 }
 
-func (w *WAL) Delete() error {
+func (w *wal) Delete() error {
 	return os.Remove(w.filePath())
 }
 
-func (w *WAL) filePath() string {
-	return path.Join(w.rootPath, fmt.Sprintf("%x_%s", w.labelsHash, walName))
+func (w *wal) Iter() iter.Seq[containers.Result[map[string]any]] {
+	return func(yield func(containers.Result[map[string]any]) bool) {
+		if _, err := w.file.Seek(0, io.SeekStart); err != nil {
+			yield(containers.Err[map[string]any](err))
+			return
+		}
+
+		scanner := bufio.NewScanner(w.file)
+		for scanner.Scan() {
+			var doc map[string]any
+			err := json.Unmarshal(scanner.Bytes(), &doc)
+			if err != nil {
+				if !yield(containers.Err[map[string]any](err)) {
+					return
+				}
+				continue
+			}
+
+			if !yield(containers.Ok(doc)) {
+				return
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			yield(containers.Err[map[string]any](err))
+		}
+	}
 }
 
-func countFileLines(filePath string) (int, error) {
-	wal, err := os.OpenFile(filePath, os.O_RDONLY, 0644)
-	if err != nil {
-		return 0, err
-	}
-	defer wal.Close()
+func (w *wal) GetDocuments(ids []uint64) iter.Seq[containers.Result[findResult]] {
+	return func(yield func(containers.Result[findResult]) bool) {
+		for doc := range w.Iter() {
+			if doc.IsErr() {
+				if !yield(containers.Err[findResult](doc.Error())) {
+					return
+				}
+				continue
+			}
 
-	// Iterate 1KB chunks of the file and count the number of newline characters
-	buf := make([]byte, 1024)
-	count := 0
-	for {
-		n, err := wal.Read(buf)
-		if err != nil && err != io.EOF {
-			return 0, err
-		}
-		if n == 0 {
-			break
-		}
-		for _, b := range buf[:n] {
-			if b == '\n' {
-				count++
+			idValue, ok := doc.Value["_id"]
+			if !ok {
+				continue
+			}
+
+			idUint, ok := idValue.(uint64)
+			if !ok {
+				continue
+			}
+
+			if slices.Contains(ids, idUint) {
+				result := findResult{
+					ID:       idUint,
+					Document: doc.Value,
+				}
+				if !yield(containers.Ok(result)) {
+					return
+				}
 			}
 		}
 	}
-
-	return count, nil
 }
 
-func inferColumns(wal *os.File) ([]archive.ColumnDef, error) {
+func (w *wal) filePath() string {
+	return path.Join(w.rootPath, fmt.Sprintf("%x_%s", w.labelsHash, walName))
+}
+
+func (w *wal) inferColumns() ([]archive.ColumnDef, error) {
 	columns := make(map[string]archive.ColumnDef)
-	scanner := bufio.NewScanner(wal)
-	for scanner.Scan() {
-		var doc map[string]any
-		err := json.Unmarshal(scanner.Bytes(), &doc)
-		if err != nil {
-			return nil, err
+	for doc := range w.Iter() {
+		if doc.IsErr() {
+			return nil, doc.Error()
 		}
 
-		for key, value := range doc {
+		for key, value := range doc.Value {
 			// Infer the column based on the value type
 			var inferredType archive.ColumnType
 			switch v := value.(type) {
@@ -231,11 +250,29 @@ func inferColumns(wal *os.File) ([]archive.ColumnDef, error) {
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		return nil, err
+	return slices.Collect(maps.Values(columns)), nil
+}
+
+func (w *wal) countFileLines() (int, error) {
+	// Iterate 1KB chunks of the file and count the number of newline characters
+	buf := make([]byte, 1024)
+	count := 0
+	for {
+		n, err := w.file.Read(buf)
+		if err != nil && err != io.EOF {
+			return 0, err
+		}
+		if n == 0 {
+			break
+		}
+		for _, b := range buf[:n] {
+			if b == '\n' {
+				count++
+			}
+		}
 	}
 
-	return slices.Collect(maps.Values(columns)), nil
+	return count, nil
 }
 
 var superTypes = map[archive.ColumnType][]archive.ColumnType{

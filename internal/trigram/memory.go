@@ -2,6 +2,7 @@ package trigram
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 )
 
@@ -34,6 +35,10 @@ func (f *memoryIndex) Add(documentID int64, content string) {
 
 		f.postingList[trigram] = slices.Insert(f.postingList[trigram], insertionIndex, postingToInsert)
 	}
+}
+
+func (f *memoryIndex) ListTrigrams() []trigram {
+	return slices.Collect(maps.Keys(f.postingList))
 }
 
 func (f *memoryIndex) GetPostings(trigram trigram) ([]Posting, error) {

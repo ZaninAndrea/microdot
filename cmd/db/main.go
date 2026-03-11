@@ -1,6 +1,10 @@
 package main
 
-import "github.com/ZaninAndrea/microdot/internal/db"
+import (
+	"time"
+
+	"github.com/ZaninAndrea/microdot/internal/db"
+)
 
 func main() {
 	myDB, err := db.NewDB("./tmp")
@@ -9,27 +13,27 @@ func main() {
 	}
 	defer myDB.Close()
 
-	err = myDB.AddDocument(db.Labels{"stream": "example"}, map[string]any{"msg": "Hello, World!"})
+	err = myDB.AddDocument(db.Labels{"stream": "example"}, map[string]any{"msg": "Hello, World!", "ts": time.Now().UnixMilli()})
 	if err != nil {
 		panic(err)
 	}
-	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!"})
+	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!", "ts": time.Now().UnixMilli()})
 	if err != nil {
 		panic(err)
 	}
-	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!"})
+	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!", "ts": time.Now().UnixMilli()})
 	if err != nil {
 		panic(err)
 	}
-	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!"})
+	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!", "ts": time.Now().UnixMilli()})
 	if err != nil {
 		panic(err)
 	}
-	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!"})
+	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!", "ts": time.Now().UnixMilli()})
 	if err != nil {
 		panic(err)
 	}
-	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!"})
+	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!", "ts": time.Now().UnixMilli()})
 	if err != nil {
 		panic(err)
 	}

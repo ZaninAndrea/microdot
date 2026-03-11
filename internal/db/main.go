@@ -4,31 +4,19 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"time"
 
 	"github.com/ZaninAndrea/microdot/internal/trigram"
 )
 
 type DB struct {
-	wal          *WAL
 	trigramIndex *trigram.Index
 
 	bufferManager *bufferManager
 }
 
 func NewDB(basePath string) (*DB, error) {
-	walFolder := path.Join(basePath, "wal")
-	err := os.MkdirAll(walFolder, os.ModePerm)
-	if err != nil {
-		return nil, err
-	}
-	wal, err := NewWAL(walFolder)
-	if err != nil {
-		return nil, err
-	}
-
 	trigramFolder := path.Join(basePath, "trigram")
-	err = os.MkdirAll(trigramFolder, os.ModePerm)
+	err := os.MkdirAll(trigramFolder, os.ModePerm)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +32,6 @@ func NewDB(basePath string) (*DB, error) {
 	}
 
 	return &DB{
-		wal:           wal,
 		trigramIndex:  trigramIndex,
 		bufferManager: newBufferManager(streamsFolder),
 	}, nil
@@ -57,24 +44,33 @@ func (d *DB) AddDocument(streamLabels Labels, data map[string]any) error {
 	if _, ok := data["msg"]; !ok {
 		return fmt.Errorf("missing 'msg' field in document")
 	}
+	if _, ok := data["msg"].(string); !ok {
+		return fmt.Errorf("'msg' field must be a string")
+	}
 	if _, ok := data["ts"]; !ok {
-		data["ts"] = time.Now().UnixMilli()
+		return fmt.Errorf("missing 'ts' field in document")
+	}
+	if _, ok := data["ts"].(int64); !ok {
+		return fmt.Errorf("'ts' field must be an int64")
+	}
+	if _, ok := data["_id"]; ok {
+		return fmt.Errorf("document cannot contain '_id' field")
 	}
 
 	// Store the primary copy of the document
-	err := d.bufferManager.AddDocument(streamLabels, data)
+	_, err := d.bufferManager.AddDocument(streamLabels, data)
 	if err != nil {
 		return err
 	}
 
 	// Add the document to the trigram index
-	err = d.wal.AddDocument(streamLabels, data)
+	err = d.trigramIndex.Add(
+		int64(hashLabels(streamLabels)),
+		data["msg"].(string),
+	)
 	if err != nil {
 		return err
 	}
-
-	msg := data["msg"].(string)
-	d.trigramIndex.Add(int64(hashLabels(streamLabels)), msg)
 
 	return nil
 }

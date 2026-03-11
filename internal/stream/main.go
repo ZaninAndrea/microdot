@@ -3,8 +3,10 @@ package stream
 import (
 	"fmt"
 	"hash/fnv"
+	"iter"
 
 	"github.com/ZaninAndrea/microdot/internal/archive"
+	"github.com/ZaninAndrea/microdot/pkg/containers"
 )
 
 type Stream struct {
@@ -12,12 +14,14 @@ type Stream struct {
 	labelsHash uint64
 	rootPath   string
 
-	wal *WAL
+	wal *wal
+
+	idCounter uint64
 }
 
 func NewStream(labels map[string]string, rootPath string) (*Stream, error) {
 	labelsHash := hashLabels(labels)
-	wal, err := NewWAL(labelsHash, rootPath)
+	wal, err := newWAL(labelsHash, rootPath)
 	if err != nil {
 		return nil, err
 	}
@@ -27,6 +31,7 @@ func NewStream(labels map[string]string, rootPath string) (*Stream, error) {
 		labelsHash: labelsHash,
 		rootPath:   rootPath,
 		wal:        wal,
+		idCounter:  0,
 	}
 
 	return s, nil
@@ -42,27 +47,55 @@ func hashLabels(labels map[string]string) uint64 {
 	return hash.Sum64()
 }
 
-func (s *Stream) AddDocument(data map[string]any) error {
+func (s *Stream) AddDocument(data map[string]any) (uint64, error) {
+	if _, ok := data["_id"]; ok {
+		return 0, fmt.Errorf("document cannot contain '_id' field")
+	}
+
+	docId := s.generateID(data["ts"].(int64))
+	data["_id"] = docId
+
 	err := s.wal.Append(data)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	if s.wal.logCount >= MAX_WAL_LOGS {
 		if err := s.compressWAL(); err != nil {
-			return err
+			return 0, err
 		}
 
 		if err := s.wal.Delete(); err != nil {
-			return err
+			return 0, err
 		}
 
 		if err := s.wal.Open(); err != nil {
-			return err
+			return 0, err
 		}
 	}
 
-	return nil
+	return docId, nil
+}
+
+type findResult struct {
+	ID       uint64
+	Document map[string]any
+}
+
+func (s *Stream) GetDocuments(ids []uint64) iter.Seq[containers.Result[findResult]] {
+	return s.wal.GetDocuments(ids)
+}
+
+func (s *Stream) generateID(unixTimestamp int64) uint64 {
+	const COUNTER_BITS = 20
+
+	s.idCounter++
+	if s.idCounter >= 1<<COUNTER_BITS {
+		s.idCounter = 0
+	}
+
+	ts := uint64(unixTimestamp) << COUNTER_BITS
+	return ts | s.idCounter
 }
 
 func (s *Stream) compressWAL() error {
@@ -71,7 +104,6 @@ func (s *Stream) compressWAL() error {
 		return err
 	}
 
-	// Pass through the WAL file again to write the compressed version
 	writer, err := archive.NewWriterFS(
 		columns,
 		s.rootPath,
