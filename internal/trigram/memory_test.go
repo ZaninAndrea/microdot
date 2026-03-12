@@ -9,7 +9,7 @@ func TestMemoryIndex(t *testing.T) {
 
 	docID := int64(1)
 	content := "hello world"
-	mi.Add(docID, content)
+	mi.Add(1, docID, content)
 
 	postings, err := search("hello", mi)
 	if err != nil {
@@ -24,7 +24,7 @@ func TestMemoryIndex(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("Expected to find document %d for query 'hello'", docID)
+		t.Errorf("Expected to find document %v for query 'hello'", docID)
 	}
 
 	// Query "universe", should not be found

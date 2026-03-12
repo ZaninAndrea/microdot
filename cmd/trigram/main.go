@@ -13,9 +13,9 @@ func main() {
 	}
 	defer index.Close()
 
-	index.Add(1, "hello world")
+	index.Add(1, 1, "hello world")
 	for i := 2; i < 10; i++ {
-		index.Add(int64(i), fmt.Sprintf("document %d content", i))
+		index.Add(1, int64(i), fmt.Sprintf("document %d content", i))
 	}
 
 	fmt.Println(index.Search("llo worl"))

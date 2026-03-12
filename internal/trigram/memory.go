@@ -16,13 +16,13 @@ func newMemoryIndex() *memoryIndex {
 	}
 }
 
-func (f *memoryIndex) Add(documentID int64, content string) {
+func (f *memoryIndex) Add(streamID, documentID int64, content string) {
 	for i, trigram := range getTrigrams(content) {
 		if _, ok := f.postingList[trigram]; !ok {
 			f.postingList[trigram] = make([]Posting, 0)
 		}
 
-		postingToInsert := Posting{DocumentID: documentID, Position: int64(i - 2)}
+		postingToInsert := Posting{StreamID: streamID, DocumentID: documentID, Position: int64(i - 2)}
 
 		insertionIndex, exists := slices.BinarySearchFunc(
 			f.postingList[trigram],
@@ -52,6 +52,7 @@ func (f *memoryIndex) GetPostings(trigram trigram) ([]Posting, error) {
 func comparePosting(a, b Posting) int {
 	return cmp.Or(
 		cmp.Compare(a.DocumentID, b.DocumentID),
+		cmp.Compare(a.StreamID, b.StreamID),
 		cmp.Compare(a.Position, b.Position),
 	)
 }

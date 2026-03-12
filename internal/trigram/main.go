@@ -13,7 +13,10 @@ type trigram [3]byte
 
 const invalidUTF8 byte = 0xFF
 
+const documentIDSize = 8
+
 type Posting struct {
+	StreamID   int64
 	DocumentID int64
 	Position   int64
 }
@@ -60,8 +63,8 @@ func NewIndex(baseFolder string) (*Index, error) {
 	}, nil
 }
 
-func (i *Index) Add(documentID int64, content string) error {
-	i.mem.Add(documentID, content)
+func (i *Index) Add(streamID, documentID int64, content string) error {
+	i.mem.Add(streamID, documentID, content)
 	i.memEntries++
 
 	if i.memEntries >= INDEX_CACHE_SIZE {

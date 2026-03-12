@@ -161,9 +161,9 @@ func (d *diskIndex) readPostingsBlock(block blockMetadata) ([]Posting, error) {
 
 	// Read the postings in the block using the delta-of-delta decoder
 	var postings []Posting
-	decoder := &compression.DeltaOfDeltaPairDecoder{Reader: d.dataReader}
+	decoder := &compression.DeltaOfDeltaSliceDecoder{Reader: d.dataReader}
 	for k := uint64(0); k < block.postingsCount; k++ {
-		pair, err := decoder.Decode()
+		pair, err := decoder.Decode(2)
 		if err != nil {
 			return nil, err
 		}
@@ -251,9 +251,9 @@ func writeToDisk(indexToWrite indexStore, dataFile, metadataFile io.WriteCloser)
 			}
 
 			// Write the block data to the data file
-			encoder := &compression.DeltaOfDeltaPairEncoder{Writer: dataWriter}
+			encoder := &compression.DeltaOfDeltaSliceEncoder{Writer: dataWriter}
 			for _, posting := range block {
-				if err := encoder.Encode(posting.DocumentID, posting.Position); err != nil {
+				if err := encoder.Encode([]int64{posting.DocumentID, posting.Position}); err != nil {
 					return err
 				}
 			}

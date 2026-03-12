@@ -58,7 +58,7 @@ func (d *DB) AddDocument(streamLabels Labels, data map[string]any) error {
 	}
 
 	// Store the primary copy of the document
-	_, err := d.bufferManager.AddDocument(streamLabels, data)
+	docID, err := d.bufferManager.AddDocument(streamLabels, data)
 	if err != nil {
 		return err
 	}
@@ -66,6 +66,7 @@ func (d *DB) AddDocument(streamLabels Labels, data map[string]any) error {
 	// Add the document to the trigram index
 	err = d.trigramIndex.Add(
 		int64(hashLabels(streamLabels)),
+		int64(docID),
 		data["msg"].(string),
 	)
 	if err != nil {

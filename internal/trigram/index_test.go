@@ -19,17 +19,18 @@ func TestIndex_AddAndSearch(t *testing.T) {
 	defer idx.Close()
 
 	docs := []struct {
-		id      int64
-		content string
+		streamID int64
+		docID    int64
+		content  string
 	}{
-		{1, "hello world"},
-		{2, "hello universe"},
-		{3, "world peace"},
+		{1, 1, "hello world"},
+		{2, 2, "hello universe"},
+		{3, 3, "world peace"},
 	}
 
 	for _, d := range docs {
-		if err := idx.Add(d.id, d.content); err != nil {
-			t.Errorf("Failed to add document %d: %v", d.id, err)
+		if err := idx.Add(d.streamID, d.docID, d.content); err != nil {
+			t.Errorf("Failed to add document %d: %v", d.docID, err)
 		}
 	}
 
@@ -83,7 +84,7 @@ func TestIndex_Persistence(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create index: %v", err)
 		}
-		if err := idx.Add(1, "persistent data"); err != nil {
+		if err := idx.Add(1, 1, "persistent data"); err != nil {
 			t.Fatalf("Failed to add document: %v", err)
 		}
 		if err := idx.Close(); err != nil {

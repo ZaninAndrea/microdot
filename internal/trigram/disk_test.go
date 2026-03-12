@@ -16,9 +16,9 @@ func TestDiskInvertedIndex(t *testing.T) {
 
 	// Create and populate the index
 	index := newMemoryIndex()
-	index.Add(1, "hello world")
-	index.Add(2, "hello universe")
-	index.Add(3, "world peace")
+	index.Add(1, 1, "hello world")
+	index.Add(1, 2, "hello universe")
+	index.Add(1, 3, "world peace")
 
 	// Write the index to disk
 	indexName := "test_index"
@@ -81,7 +81,7 @@ func TestDiskInvertedIndex_LargeData(t *testing.T) {
 	// Add enough data to trigger multiple blocks
 	count := POSTING_BLOCK_SIZE * 3
 	for i := 1; i <= count; i++ {
-		index.Add(int64(i), "commonword")
+		index.Add(1, int64(i), "commonword")
 	}
 
 	indexName := "large_index"

@@ -1,5 +1,7 @@
 package trigram
 
+import "cmp"
+
 // search returns the postings matching the given query. For each match the posting of the first trigram is returned.
 func search(
 	query string,
@@ -41,9 +43,14 @@ func search(
 			postingA := setA[indexA]
 			postingB := setB[indexB]
 
-			if postingA.DocumentID < postingB.DocumentID {
+			compare := cmp.Or(
+				cmp.Compare(postingA.DocumentID, postingB.DocumentID),
+				cmp.Compare(postingA.StreamID, postingB.StreamID),
+			)
+
+			if compare < 0 {
 				indexA++
-			} else if postingA.DocumentID > postingB.DocumentID {
+			} else if compare > 0 {
 				indexB++
 			} else if postingB.Position-postingA.Position < int64(i) {
 				indexB++
