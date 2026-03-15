@@ -5,6 +5,7 @@ import (
 	"hash/fnv"
 	"iter"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/ZaninAndrea/microdot/internal/archive"
@@ -26,8 +27,10 @@ type Stream struct {
 
 const STREAM_CACHE_SIZE = 100
 
+// NewStream creates a new Stream instance with the given labels and root path for storage.
+// If a stream with the same labels already exists, it will be opened and returned.
 func NewStream(labels map[string]string, rootPath string) (*Stream, error) {
-	labelsHash := hashLabels(labels)
+	labelsHash := HashLabels(labels)
 	wal, err := newWAL(labelsHash, rootPath)
 	if err != nil {
 		return nil, err
@@ -35,6 +38,39 @@ func NewStream(labels map[string]string, rootPath string) (*Stream, error) {
 
 	s := &Stream{
 		labels:     labels,
+		labelsHash: labelsHash,
+		rootPath:   rootPath,
+		wal:        wal,
+		idCounter:  0,
+	}
+
+	diskEntries, err := loadDiskEntries(rootPath, labelsHash)
+	if err != nil {
+		return nil, err
+	}
+
+	s.diskEntries = diskEntries
+	s.disks = *cache.NewLRU(
+		STREAM_CACHE_SIZE,
+		func(name string) (*diskStream, error) {
+			return openDiskStreamFS(rootPath, name)
+		},
+		func(d *diskStream) { _ = d.Close() },
+	)
+
+	return s, nil
+}
+
+// OpenStream opens an existing stream with the ID.
+func OpenStream(labelsHash uint64, rootPath string) (*Stream, error) {
+	wal, err := newWAL(labelsHash, rootPath)
+	if err != nil {
+		return nil, err
+	}
+
+	s := &Stream{
+		// TODO: Load labels from disk instead of using an empty map
+		labels:     map[string]string{},
 		labelsHash: labelsHash,
 		rootPath:   rootPath,
 		wal:        wal,
@@ -83,9 +119,16 @@ func loadDiskEntries(rootPath string, labelsHash uint64) ([]string, error) {
 	return diskEntries, nil
 }
 
-func hashLabels(labels map[string]string) uint64 {
+func HashLabels(labels map[string]string) uint64 {
 	hash := fnv.New64a()
-	for key, value := range labels {
+	keys := make([]string, 0, len(labels))
+	for key := range labels {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	for _, key := range keys {
+		value := labels[key]
 		hash.Write([]byte(key))
 		hash.Write([]byte(value))
 	}
@@ -123,13 +166,13 @@ func (s *Stream) AddDocument(data map[string]any) (uint64, error) {
 	return docId, nil
 }
 
-type findResult struct {
+type FindResult struct {
 	ID       uint64
 	Document map[string]any
 }
 
-func (s *Stream) GetDocuments(ids []uint64) iter.Seq[containers.Result[findResult]] {
-	return func(yield func(containers.Result[findResult]) bool) {
+func (s *Stream) GetDocuments(ids []uint64) iter.Seq[containers.Result[FindResult]] {
+	return func(yield func(containers.Result[FindResult]) bool) {
 		for _, name := range s.diskEntries {
 			disk, err := s.disks.Get(name)
 			if err != nil {

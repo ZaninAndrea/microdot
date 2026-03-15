@@ -1,16 +1,11 @@
 package trigram
 
 import (
-	"os"
 	"testing"
 )
 
 func TestIndex_AddAndSearch(t *testing.T) {
-	baseFolder, err := os.MkdirTemp("", "trigram_index_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(baseFolder)
+	baseFolder := t.TempDir()
 
 	idx, err := NewIndex(baseFolder)
 	if err != nil {
@@ -72,11 +67,7 @@ func TestIndex_AddAndSearch(t *testing.T) {
 }
 
 func TestIndex_Persistence(t *testing.T) {
-	baseFolder, err := os.MkdirTemp("", "trigram_index_persistence_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(baseFolder)
+	baseFolder := t.TempDir()
 
 	// Phase 1: Create index, add doc, close (flush)
 	{

@@ -2,12 +2,12 @@ package stream
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"iter"
 	"maps"
-	"math"
 	"os"
 	"path"
 	"slices"
@@ -101,17 +101,9 @@ func (w *wal) ConsolidateData() ([]archive.ColumnDef, iter.Seq[containers.Result
 	}
 
 	rowIter := func(yield func(containers.Result[archive.Row]) bool) {
-		if _, err := w.file.Seek(0, io.SeekStart); err != nil {
-			yield(containers.Err[archive.Row](err))
-			return
-		}
-
-		scanner := bufio.NewScanner(w.file)
-		for scanner.Scan() {
-			var doc map[string]any
-			err := json.Unmarshal(scanner.Bytes(), &doc)
-			if err != nil {
-				if !yield(containers.Err[archive.Row](err)) {
+		for doc := range w.Iter() {
+			if doc.IsErr() {
+				if !yield(containers.Err[archive.Row](doc.Error())) {
 					return
 				}
 				continue
@@ -119,16 +111,12 @@ func (w *wal) ConsolidateData() ([]archive.ColumnDef, iter.Seq[containers.Result
 
 			row := archive.Row{}
 			for _, col := range columns {
-				row = append(row, doc[col.Key])
+				row = append(row, doc.Value[col.Key])
 			}
 
 			if !yield(containers.Ok(row)) {
 				return
 			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			yield(containers.Err[archive.Row](err))
 		}
 	}
 
@@ -155,13 +143,28 @@ func (w *wal) Iter() iter.Seq[containers.Result[map[string]any]] {
 
 		scanner := bufio.NewScanner(w.file)
 		for scanner.Scan() {
+			// Decode the JSON line into a map[string]any.
+			// UseNumber() is needed to preserve the full precision of uint64 values, which would otherwise
+			// be degraded if decoded as float64.
 			var doc map[string]any
-			err := json.Unmarshal(scanner.Bytes(), &doc)
+			dec := json.NewDecoder(bytes.NewReader(scanner.Bytes()))
+			dec.UseNumber()
+			err := dec.Decode(&doc)
 			if err != nil {
 				if !yield(containers.Err[map[string]any](err)) {
 					return
 				}
 				continue
+			}
+
+			for key, value := range doc {
+				if n, ok := value.(json.Number); ok {
+					if i, err := n.Int64(); err == nil {
+						doc[key] = i
+					} else if f, err := n.Float64(); err == nil {
+						doc[key] = f
+					}
+				}
 			}
 
 			if !yield(containers.Ok(doc)) {
@@ -175,11 +178,11 @@ func (w *wal) Iter() iter.Seq[containers.Result[map[string]any]] {
 	}
 }
 
-func (w *wal) getDocuments(ids []uint64) iter.Seq[containers.Result[findResult]] {
-	return func(yield func(containers.Result[findResult]) bool) {
+func (w *wal) getDocuments(ids []uint64) iter.Seq[containers.Result[FindResult]] {
+	return func(yield func(containers.Result[FindResult]) bool) {
 		for doc := range w.Iter() {
 			if doc.IsErr() {
-				if !yield(containers.Err[findResult](doc.Error())) {
+				if !yield(containers.Err[FindResult](doc.Error())) {
 					return
 				}
 				continue
@@ -190,13 +193,14 @@ func (w *wal) getDocuments(ids []uint64) iter.Seq[containers.Result[findResult]]
 				continue
 			}
 
-			idUint, ok := idValue.(uint64)
+			idInt, ok := idValue.(int64)
 			if !ok {
 				continue
 			}
+			idUint := uint64(idInt)
 
 			if slices.Contains(ids, idUint) {
-				result := findResult{
+				result := FindResult{
 					ID:       idUint,
 					Document: doc.Value,
 				}
@@ -222,13 +226,9 @@ func (w *wal) inferColumns() ([]archive.ColumnDef, error) {
 		for key, value := range doc.Value {
 			// Infer the column based on the value type
 			var inferredType archive.ColumnType
-			switch v := value.(type) {
+			switch value.(type) {
 			case float64:
-				if v == math.Trunc(v) {
-					inferredType = archive.ColumnTypeInt64
-				} else {
-					inferredType = archive.ColumnTypeFloat64
-				}
+				inferredType = archive.ColumnTypeFloat64
 			case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 				inferredType = archive.ColumnTypeInt64
 			case string:

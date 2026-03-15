@@ -1,18 +1,13 @@
 package trigram
 
 import (
-	"os"
 	"slices"
 	"testing"
 )
 
 func TestDiskInvertedIndex(t *testing.T) {
 	// Create a temporary directory for the test
-	tempDir, err := os.MkdirTemp("", "trigram_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create and populate the index
 	index := newMemoryIndex()
@@ -69,13 +64,7 @@ func TestDiskInvertedIndex(t *testing.T) {
 }
 
 func TestDiskInvertedIndex_LargeData(t *testing.T) {
-	// Create a temporary directory for the test
-	tempDir, err := os.MkdirTemp("", "trigram_test_large")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
+	tempDir := t.TempDir()
 	index := newMemoryIndex()
 
 	// Add enough data to trigger multiple blocks

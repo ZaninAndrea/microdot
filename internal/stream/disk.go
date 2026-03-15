@@ -44,8 +44,8 @@ func openDiskStream(dataFile, metadataFile io.ReadSeekCloser) (*diskStream, erro
 	return &diskStream{reader: reader, idColumnIdx: idColumnIdx}, nil
 }
 
-func (d *diskStream) getDocuments(ids []uint64) iter.Seq[containers.Result[findResult]] {
-	return func(yield func(containers.Result[findResult]) bool) {
+func (d *diskStream) getDocuments(ids []uint64) iter.Seq[containers.Result[FindResult]] {
+	return func(yield func(containers.Result[FindResult]) bool) {
 		if d.idColumnIdx < 0 {
 			return
 		}
@@ -53,7 +53,7 @@ func (d *diskStream) getDocuments(ids []uint64) iter.Seq[containers.Result[findR
 		columns := d.reader.Columns()
 		for row := range d.reader.Rows() {
 			if row.IsErr() {
-				if !yield(containers.Err[findResult](row.Error())) {
+				if !yield(containers.Err[FindResult](row.Error())) {
 					return
 				}
 				continue
@@ -75,7 +75,7 @@ func (d *diskStream) getDocuments(ids []uint64) iter.Seq[containers.Result[findR
 				document[col.Key] = row.Value[i]
 			}
 
-			if !yield(containers.Ok(findResult{ID: id, Document: document})) {
+			if !yield(containers.Ok(FindResult{ID: id, Document: document})) {
 				return
 			}
 		}

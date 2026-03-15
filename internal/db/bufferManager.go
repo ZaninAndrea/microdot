@@ -1,9 +1,10 @@
 package db
 
 import (
-	"hash/fnv"
+	"iter"
 
 	"github.com/ZaninAndrea/microdot/internal/stream"
+	"github.com/ZaninAndrea/microdot/pkg/containers"
 )
 
 type bufferManager struct {
@@ -21,7 +22,7 @@ func newBufferManager(rootPath string) *bufferManager {
 // AddDocument adds a document to the appropriate stream based on the provided labels.
 // It returns the generated document ID and any error encountered during the process.
 func (bm *bufferManager) AddDocument(streamLabels Labels, data map[string]any) (uint64, error) {
-	streamID := hashLabels(streamLabels)
+	streamID := stream.HashLabels(streamLabels)
 
 	if _, exists := bm.streams[streamID]; !exists {
 		// Create a new stream for the given labels
@@ -38,12 +39,17 @@ func (bm *bufferManager) AddDocument(streamLabels Labels, data map[string]any) (
 	return bm.streams[streamID].AddDocument(data)
 }
 
-func hashLabels(labels Labels) uint64 {
-	hash := fnv.New64a()
-	for key, value := range labels {
-		hash.Write([]byte(key))
-		hash.Write([]byte(value))
+func (bm *bufferManager) GetDocuments(labelsHash uint64, ids []uint64) iter.Seq[containers.Result[stream.FindResult]] {
+	if _, exists := bm.streams[labelsHash]; !exists {
+		newStream, err := stream.OpenStream(labelsHash, bm.rootPath)
+		if err != nil {
+			return func(yield func(containers.Result[stream.FindResult]) bool) {
+				yield(containers.Err[stream.FindResult](err))
+			}
+		}
+
+		bm.streams[labelsHash] = newStream
 	}
 
-	return hash.Sum64()
+	return bm.streams[labelsHash].GetDocuments(ids)
 }

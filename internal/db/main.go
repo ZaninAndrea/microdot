@@ -2,10 +2,13 @@ package db
 
 import (
 	"fmt"
+	"iter"
 	"os"
 	"path"
 
+	"github.com/ZaninAndrea/microdot/internal/stream"
 	"github.com/ZaninAndrea/microdot/internal/trigram"
+	"github.com/ZaninAndrea/microdot/pkg/containers"
 )
 
 type DB struct {
@@ -65,7 +68,7 @@ func (d *DB) AddDocument(streamLabels Labels, data map[string]any) error {
 
 	// Add the document to the trigram index
 	err = d.trigramIndex.Add(
-		int64(hashLabels(streamLabels)),
+		int64(stream.HashLabels(streamLabels)),
 		int64(docID),
 		data["msg"].(string),
 	)
@@ -76,8 +79,52 @@ func (d *DB) AddDocument(streamLabels Labels, data map[string]any) error {
 	return nil
 }
 
-func (d *DB) Query(streamLabels Labels, query string) ([]map[string]any, error) {
-	return nil, nil
+type QueryResult struct {
+	StreamID   uint64
+	DocumentID uint64
+	Document   map[string]any
+}
+
+func (d *DB) Query(streamLabels Labels, query string) iter.Seq[containers.Result[QueryResult]] {
+	matches, err := d.trigramIndex.Search(query)
+	if err != nil {
+		return func(yield func(containers.Result[QueryResult]) bool) {
+			yield(containers.Err[QueryResult](err))
+		}
+	}
+
+	// Group matches by stream ID
+	var streamToDocIDs = make(map[uint64][]uint64)
+	for _, match := range matches {
+		if _, ok := streamToDocIDs[uint64(match.StreamID)]; !ok {
+			streamToDocIDs[uint64(match.StreamID)] = make([]uint64, 0)
+		}
+
+		streamToDocIDs[uint64(match.StreamID)] = append(streamToDocIDs[uint64(match.StreamID)], uint64(match.DocumentID))
+	}
+
+	return func(yield func(containers.Result[QueryResult]) bool) {
+		for streamID, docIDs := range streamToDocIDs {
+			for result := range d.bufferManager.GetDocuments(streamID, docIDs) {
+				if result.IsErr() {
+					if !yield(containers.Err[QueryResult](result.Error())) {
+						return
+					}
+					continue
+				}
+
+				queryResult := QueryResult{
+					StreamID:   streamID,
+					DocumentID: result.Value.ID,
+					Document:   result.Value.Document,
+				}
+
+				if !yield(containers.Ok(queryResult)) {
+					return
+				}
+			}
+		}
+	}
 }
 
 func (d *DB) Close() error {
