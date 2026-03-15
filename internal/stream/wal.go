@@ -51,7 +51,7 @@ func (w *wal) Open() error {
 			return err
 		}
 
-		f, err := os.OpenFile(walFilePath, os.O_APPEND|os.O_CREATE, 0644)
+		f, err := os.OpenFile(walFilePath, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
 		if err != nil {
 			return err
 		}
@@ -60,7 +60,7 @@ func (w *wal) Open() error {
 		w.logCount = 0
 		return nil
 	} else {
-		f, err := os.OpenFile(walFilePath, os.O_APPEND, 0644)
+		f, err := os.OpenFile(walFilePath, os.O_RDWR|os.O_APPEND, 0644)
 		if err != nil {
 			return err
 		}
