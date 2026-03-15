@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"hash/fnv"
 	"iter"
+	"os"
+	"strings"
 
 	"github.com/ZaninAndrea/microdot/internal/archive"
+	"github.com/ZaninAndrea/microdot/pkg/cache"
 	"github.com/ZaninAndrea/microdot/pkg/containers"
 )
 
@@ -14,10 +17,14 @@ type Stream struct {
 	labelsHash uint64
 	rootPath   string
 
-	wal *wal
+	wal         *wal
+	disks       cache.LRU[string, *diskStream]
+	diskEntries []string
 
 	idCounter uint64
 }
+
+const STREAM_CACHE_SIZE = 100
 
 func NewStream(labels map[string]string, rootPath string) (*Stream, error) {
 	labelsHash := hashLabels(labels)
@@ -34,7 +41,46 @@ func NewStream(labels map[string]string, rootPath string) (*Stream, error) {
 		idCounter:  0,
 	}
 
+	diskEntries, err := loadDiskEntries(rootPath, labelsHash)
+	if err != nil {
+		return nil, err
+	}
+
+	s.diskEntries = diskEntries
+	s.disks = *cache.NewLRU(
+		STREAM_CACHE_SIZE,
+		func(name string) (*diskStream, error) {
+			return openDiskStreamFS(rootPath, name)
+		},
+		func(d *diskStream) { _ = d.Close() },
+	)
+
 	return s, nil
+}
+
+func loadDiskEntries(rootPath string, labelsHash uint64) ([]string, error) {
+	files, err := os.ReadDir(rootPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	prefix := fmt.Sprintf("%x", labelsHash)
+	diskEntries := make([]string, 0)
+	for _, file := range files {
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".data.bin") {
+			continue
+		}
+
+		name := strings.TrimSuffix(file.Name(), ".data.bin")
+		if strings.HasPrefix(name, prefix) {
+			diskEntries = append(diskEntries, name)
+		}
+	}
+
+	return diskEntries, nil
 }
 
 func hashLabels(labels map[string]string) uint64 {
@@ -83,7 +129,26 @@ type findResult struct {
 }
 
 func (s *Stream) GetDocuments(ids []uint64) iter.Seq[containers.Result[findResult]] {
-	return s.wal.GetDocuments(ids)
+	return func(yield func(containers.Result[findResult]) bool) {
+		for _, name := range s.diskEntries {
+			disk, err := s.disks.Get(name)
+			if err != nil {
+				continue
+			}
+
+			for result := range disk.getDocuments(ids) {
+				if !yield(result) {
+					return
+				}
+			}
+		}
+
+		for result := range s.wal.getDocuments(ids) {
+			if !yield(result) {
+				return
+			}
+		}
+	}
 }
 
 func (s *Stream) generateID(unixTimestamp int64) uint64 {
@@ -104,11 +169,14 @@ func (s *Stream) compressWAL() error {
 		return err
 	}
 
+	archive_idx := len(s.diskEntries)
+	archiveName := fmt.Sprintf("%x_%d", s.labelsHash, archive_idx)
+
 	writer, err := archive.NewWriterFS(
 		columns,
 		s.labels,
 		s.rootPath,
-		fmt.Sprintf("%x", s.labelsHash),
+		archiveName,
 	)
 	if err != nil {
 		return err
@@ -129,9 +197,12 @@ func (s *Stream) compressWAL() error {
 		return err
 	}
 
+	s.diskEntries = append(s.diskEntries, archiveName)
+
 	return nil
 }
 
 func (s *Stream) Close() error {
+	s.disks.Purge()
 	return s.wal.Close()
 }

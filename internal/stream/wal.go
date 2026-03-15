@@ -175,7 +175,7 @@ func (w *wal) Iter() iter.Seq[containers.Result[map[string]any]] {
 	}
 }
 
-func (w *wal) GetDocuments(ids []uint64) iter.Seq[containers.Result[findResult]] {
+func (w *wal) getDocuments(ids []uint64) iter.Seq[containers.Result[findResult]] {
 	return func(yield func(containers.Result[findResult]) bool) {
 		for doc := range w.Iter() {
 			if doc.IsErr() {

@@ -13,8 +13,6 @@ type trigram [3]byte
 
 const invalidUTF8 byte = 0xFF
 
-const documentIDSize = 8
-
 type Posting struct {
 	StreamID   int64
 	DocumentID int64
