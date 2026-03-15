@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"maps"
 	"os"
 	"path"
 
@@ -15,6 +16,7 @@ import (
 type Reader struct {
 	dataFile     StructuredReader
 	metadataFile StructuredReader
+	labels       map[string]string
 	columnDefs   []ColumnDef
 	blockCount   uint64
 	blocks       []blockMetadata
@@ -59,6 +61,26 @@ func (r *Reader) readMetadataHeader() error {
 		return ErrUnsupportedFormatVersion
 	}
 
+	numLabels, err := r.metadataFile.ReadUvarint()
+	if err != nil {
+		return err
+	}
+
+	r.labels = make(map[string]string)
+	for i := uint64(0); i < numLabels; i++ {
+		key, err := r.metadataFile.ReadString()
+		if err != nil {
+			return err
+		}
+
+		value, err := r.metadataFile.ReadString()
+		if err != nil {
+			return err
+		}
+
+		r.labels[key] = value
+	}
+
 	numColumns, err := r.metadataFile.ReadUvarint()
 	if err != nil {
 		return err
@@ -94,6 +116,10 @@ func (r *Reader) readMetadataHeader() error {
 
 func (r *Reader) Columns() []ColumnDef {
 	return r.columnDefs
+}
+
+func (r *Reader) Labels() map[string]string {
+	return maps.Clone(r.labels)
 }
 
 func (r *Reader) Close() error {

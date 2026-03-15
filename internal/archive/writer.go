@@ -3,8 +3,10 @@ package archive
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
+	"sort"
 
 	"github.com/ZaninAndrea/microdot/pkg/compression"
 )
@@ -13,12 +15,13 @@ type Writer struct {
 	dataFile     StructuredWriter
 	metadataFile StructuredWriter
 	columns      []ColumnDef
+	labels       map[string]string
 
 	bufferedRows []Row
 	blocks       []blockMetadata
 }
 
-func NewWriter(columns []ColumnDef, dataFile, metadataFile io.WriteCloser) (*Writer, error) {
+func NewWriter(columns []ColumnDef, labels map[string]string, dataFile, metadataFile io.WriteCloser) (*Writer, error) {
 	if len(columns) == 0 {
 		return nil, ErrNoColumns
 	}
@@ -27,6 +30,7 @@ func NewWriter(columns []ColumnDef, dataFile, metadataFile io.WriteCloser) (*Wri
 		dataFile:     StructuredWriter{w: dataFile},
 		metadataFile: StructuredWriter{w: metadataFile},
 		columns:      columns,
+		labels:       maps.Clone(labels),
 		bufferedRows: []Row{},
 		blocks:       []blockMetadata{},
 	}
@@ -39,7 +43,7 @@ func NewWriter(columns []ColumnDef, dataFile, metadataFile io.WriteCloser) (*Wri
 	return writer, nil
 }
 
-func NewWriterFS(columns []ColumnDef, folder, name string) (*Writer, error) {
+func NewWriterFS(columns []ColumnDef, labels map[string]string, folder, name string) (*Writer, error) {
 	// Open the data and metadata files for writing
 	dataFile, err := os.Create(path.Join(folder, name+".data.bin"))
 	if err != nil {
@@ -51,12 +55,32 @@ func NewWriterFS(columns []ColumnDef, folder, name string) (*Writer, error) {
 		return nil, err
 	}
 
-	return NewWriter(columns, dataFile, metadataFile)
+	return NewWriter(columns, labels, dataFile, metadataFile)
 }
 
 func (w *Writer) writeMetadataHeader() error {
 	if err := w.metadataFile.WriteUInt32(FORMAT_VERSION); err != nil {
 		return err
+	}
+
+	if err := w.metadataFile.WriteUvarint(uint64(len(w.labels))); err != nil {
+		return err
+	}
+
+	labelKeys := make([]string, 0, len(w.labels))
+	for key := range w.labels {
+		labelKeys = append(labelKeys, key)
+	}
+	sort.Strings(labelKeys)
+
+	for _, key := range labelKeys {
+		if err := w.metadataFile.WriteString(key); err != nil {
+			return err
+		}
+
+		if err := w.metadataFile.WriteString(w.labels[key]); err != nil {
+			return err
+		}
 	}
 
 	if err := w.metadataFile.WriteUvarint(uint64(len(w.columns))); err != nil {

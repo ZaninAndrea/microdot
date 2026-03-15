@@ -131,3 +131,15 @@ Dovrebbe esserci una buffer pool globale che eroga buffer in memory fino ad un l
 
 - Per il benchmarking posso usare #link("https://vector.dev/docs/reference/configuration/sources/demo_logs/#interval")[Vector.dev] come generatore di log per i test
 - Quando microdot si avvia la prima volta potrebbe eseguire in automatico un tuning dei vari parametri per ottimizzare le performance.
+
+= ID
+
+Ogni log ha un ID univoco, che è formato da ID dello stream + timestamp + un numero progressivo per distinguere log con lo stesso timestamp. Ogni stream ha un proprio contatore per il numero progressivo. Dato che i log di ciascuno stream vengono inseriti in ordine di timestamp, questo ID è strictly increasing.
+
+Nel caso di log che arrivano out of order, assegnamo come ID l'ID precedente+1 in questo modo gli ID rimangono unici e strictly increasing; il timestamp out of order lo salviamo in un apposito campo del log `_ooo_ts` in modo da poter mostrare nella UI che il log è arrivato in ritardo.
+
+In fase di query possiamo allargare l'intervallo di timestamp per includere anche i log out of order, questo ci permette di avere un cutoff di ritardo diverso per ciascuna query.
+
+= Stream open
+
+Quando viene aperto uno stream invece di rileggere tutto il WAL possiamo leggere dal fondo fino a trovare il primo \n e poi leggere l'ultimo log partendo da lì. In questo modo riotteniamo il precedente ID. Invece di usare il numero di log possiamo usare la file size come limite per comprimere il WAL.

@@ -106,6 +106,7 @@ func (s *Stream) compressWAL() error {
 
 	writer, err := archive.NewWriterFS(
 		columns,
+		s.labels,
 		s.rootPath,
 		fmt.Sprintf("%x", s.labelsHash),
 	)

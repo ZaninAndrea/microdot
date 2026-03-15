@@ -10,6 +10,9 @@ import "fmt"
 //  	- A checksum for the block
 // - The metadata file:
 //  - The format version (uint32)
+// 	- The timeseries labels. Starts with number of labels, then for each label:
+// 		- Key (string with length explicitly stated at the beginning)
+// 		- Value (string with length explicitly stated at the beginning)
 // 	- The number of columns (uvarint)
 // 	- List of columns. Starts with the number of columns, then for each column:
 // 		- Name (string with length explicitly stated at the beginning)

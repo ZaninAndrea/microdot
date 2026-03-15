@@ -79,11 +79,16 @@ func TestReadWriteCycle(t *testing.T) {
 }
 
 func checkReadWriteCycle(t *testing.T, columns []ColumnDef, rows []Row) {
+	labels := map[string]string{
+		"host":   "server-01",
+		"region": "us-east",
+	}
+
 	// Write the data to buffers
 	var dataBuf bytes.Buffer
 	var metaBuf bytes.Buffer
 
-	writer, err := NewWriter(columns, NopWriteCloser(&dataBuf), NopWriteCloser(&metaBuf))
+	writer, err := NewWriter(columns, labels, NopWriteCloser(&dataBuf), NopWriteCloser(&metaBuf))
 	if err != nil {
 		t.Fatalf("Failed to create writer: %v", err)
 	}
@@ -113,6 +118,16 @@ func checkReadWriteCycle(t *testing.T, columns []ColumnDef, rows []Row) {
 	for i, col := range columns {
 		if readCols[i].Key != col.Key || readCols[i].Type != col.Type {
 			t.Errorf("Column %d mismatch. Expected %v, got %v", i, col, readCols[i])
+		}
+	}
+
+	readLabels := reader.Labels()
+	if len(readLabels) != len(labels) {
+		t.Fatalf("Labels output mismatch. Expected %d, got %d", len(labels), len(readLabels))
+	}
+	for key, value := range labels {
+		if readLabels[key] != value {
+			t.Errorf("Label %q mismatch. Expected %q, got %q", key, value, readLabels[key])
 		}
 	}
 
@@ -171,7 +186,7 @@ func BenchmarkCompression(b *testing.B) {
 		var dataBuf bytes.Buffer
 		var metaBuf bytes.Buffer
 
-		writer, err := NewWriter(columns, NopWriteCloser(&dataBuf), NopWriteCloser(&metaBuf))
+		writer, err := NewWriter(columns, map[string]string{}, NopWriteCloser(&dataBuf), NopWriteCloser(&metaBuf))
 		if err != nil {
 			b.Fatalf("Failed to create writer: %v", err)
 		}
