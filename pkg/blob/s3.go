@@ -5,35 +5,35 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type S3Bucket struct {
-	client *s3.Client
-	name   string
+	client  *s3.Client
+	manager *transfermanager.Client
+	name    string
 }
 
 func NewS3Bucket(client *s3.Client, name string) *S3Bucket {
 	return &S3Bucket{
-		client: client,
-		name:   name,
+		client:  client,
+		manager: transfermanager.New(client),
+		name:    name,
 	}
 }
 
 func (b *S3Bucket) PutObject(ctx context.Context, key string, content io.Reader) error {
-	uploader := manager.NewUploader(b.client)
-	_, err := uploader.Upload(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(b.name),
-		Key:    aws.String(key),
+	_, err := b.manager.UploadObject(ctx, &transfermanager.UploadObjectInput{
+		Bucket: new(b.name),
+		Key:    new(key),
 		Body:   content,
 	})
 	return err
 }
 
 func (b *S3Bucket) GetObject(ctx context.Context, key string) (io.ReadCloser, error) {
-	result, err := b.client.GetObject(ctx, &s3.GetObjectInput{
+	result, err := b.manager.GetObject(ctx, &transfermanager.GetObjectInput{
 		Bucket: new(b.name),
 		Key:    new(key),
 	})
@@ -41,7 +41,7 @@ func (b *S3Bucket) GetObject(ctx context.Context, key string) (io.ReadCloser, er
 		return nil, err
 	}
 
-	return result.Body, nil
+	return io.NopCloser(result.Body), nil
 }
 
 func (b *S3Bucket) GetObjectRange(ctx context.Context, key string, start, end int) (io.ReadCloser, error) {
