@@ -8,11 +8,16 @@
   doc,
 )
 
-= Architettura
+= Oggetti
 
-L'architettura prevista per il sistema completo è la seguente:
+Gli oggetti salvati su S3 sono:
+- WAL directory: contiene i log non ancora compattati, che vengono letti per servire le query più recenti.
+  - Viene creato un nuovo file ogni 1MB o ogni 10 secondi, a seconda di quale condizione si verifica prima.
+  - Per evitare di dover leggere troppi file, i WAL files vengono compattati in file più grandi a gruppi di 10 file, fino ad una dimensione di 100MB.
+- Stream directory: quando i WAL files superano i 100MB vengono spezzati in base allo stream. Per ogni stream viene creato un archive file separato.
+  - Man mano che vengono creati nuovi archive file per un dato stream, i file di uno stesso stream vengono gestiti come un LSM-tree
 
-#image("./diagrams/architecture.drawio.png", width: 100%)
+
 
 = Requisiti
 I requisiti di design del sistema sono i seguenti:
