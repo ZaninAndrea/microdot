@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -33,22 +34,22 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao, Mondo!", "ts": time.Now().UnixMilli()})
+	err = myDB.AddDocument(db.Labels{"stream": "example2"}, map[string]any{"msg": "Ciao ciao!", "ts": time.Now().UnixMilli()})
 	if err != nil {
 		panic(err)
 	}
 
-	// results := myDB.Query(db.Labels{"stream": "example2"}, "Ciao")
-	// fmt.Println("Query results:")
-	// for res := range results {
-	// 	if res.IsErr() {
-	// 		println("Error:", res.Error().Error())
-	// 		continue
-	// 	}
+	results := myDB.Query(db.Labels{"stream": "example2"}, "Ciao")
+	fmt.Println("Query results:")
+	for res := range results {
+		if res.IsErr() {
+			println("Error:", res.Error().Error())
+			continue
+		}
 
-	// 	// Print the stream labels
-	// 	fmt.Printf("[%d] %d: %s\n", res.Value.StreamID, res.Value.DocumentID, res.Value.Document["msg"])
-	// }
+		// Print the stream labels
+		fmt.Printf("[%d] %d: %s\n", res.Value.StreamID, res.Value.DocumentID, res.Value.Document["msg"])
+	}
 }
 
 func initBucket() blob.Bucket {

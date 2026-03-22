@@ -1,21 +1,27 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"iter"
+	"strings"
 
+	"github.com/ZaninAndrea/microdot/internal/wal"
 	"github.com/ZaninAndrea/microdot/pkg/blob"
 	"github.com/ZaninAndrea/microdot/pkg/containers"
 )
 
 type DB struct {
-	walWriter *walWriter
+	walWriter *wal.Writer
+	walReader *wal.Reader
 }
 
 func NewDB(bucket blob.Bucket) (*DB, error) {
-	walWriter := newWalWriter(bucket)
+	walWriter := wal.NewWriter(bucket)
+	walReader := wal.NewReader(bucket)
 	return &DB{
 		walWriter: walWriter,
+		walReader: walReader,
 	}, nil
 }
 
@@ -39,7 +45,10 @@ func (d *DB) AddDocument(streamLabels Labels, data map[string]any) error {
 		return fmt.Errorf("document cannot contain '_id' field")
 	}
 
-	return d.walWriter.AddDocument(streamLabels, data)
+	return d.walWriter.AddDocument(context.Background(), wal.Record{
+		StreamLabels: streamLabels,
+		Data:         data,
+	})
 }
 
 type QueryResult struct {
@@ -49,7 +58,27 @@ type QueryResult struct {
 }
 
 func (d *DB) Query(streamLabels Labels, query string) iter.Seq[containers.Result[QueryResult]] {
-	return nil
+	return func(yield func(containers.Result[QueryResult]) bool) {
+		for record := range d.walReader.Iter(context.Background()) {
+			if record.IsErr() {
+				err := record.Error()
+				if !yield(containers.Err[QueryResult](err)) {
+					return
+				}
+				continue
+			}
+
+			if matchesLabels(record.Value.StreamLabels, streamLabels) && matchesQuery(record.Value.Data, query) {
+				queryResult := QueryResult{
+					Document: record.Value.Data,
+				}
+				if !yield(containers.Ok(queryResult)) {
+					return
+				}
+			}
+		}
+	}
+
 	// 	matches, err := d.trigramIndex.Search(query)
 	// 	if err != nil {
 	// 		return func(yield func(containers.Result[QueryResult]) bool) {
@@ -93,4 +122,27 @@ func (d *DB) Query(streamLabels Labels, query string) iter.Seq[containers.Result
 
 func (d *DB) Close() error {
 	return nil
+}
+
+func matchesLabels(recordLabels, queryLabels Labels) bool {
+	for key, value := range queryLabels {
+		if recordValue, ok := recordLabels[key]; !ok || recordValue != value {
+			return false
+		}
+	}
+
+	return true
+}
+
+func matchesQuery(document map[string]any, query string) bool {
+	msgValue, ok := document["msg"]
+	if !ok {
+		return false
+	}
+	msgStr, ok := msgValue.(string)
+	if !ok {
+		return false
+	}
+
+	return strings.Contains(msgStr, query)
 }

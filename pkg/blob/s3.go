@@ -3,8 +3,10 @@ package blob
 import (
 	"context"
 	"io"
+	"iter"
 	"strconv"
 
+	"github.com/ZaninAndrea/microdot/pkg/containers"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
@@ -63,4 +65,27 @@ func (b *S3Bucket) DeleteObject(ctx context.Context, key string) error {
 		Key:    new(key),
 	})
 	return err
+}
+
+func (b *S3Bucket) ListObjects(ctx context.Context, prefix string) iter.Seq[containers.Result[string]] {
+	return func(yield func(containers.Result[string]) bool) {
+		paginator := s3.NewListObjectsV2Paginator(b.client, &s3.ListObjectsV2Input{
+			Bucket: new(b.name),
+			Prefix: new(prefix),
+		})
+
+		for paginator.HasMorePages() {
+			page, err := paginator.NextPage(ctx)
+			if err != nil {
+				yield(containers.Err[string](err))
+				return
+			}
+
+			for _, obj := range page.Contents {
+				if !yield(containers.Ok(*obj.Key)) {
+					return
+				}
+			}
+		}
+	}
 }

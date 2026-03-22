@@ -1,4 +1,4 @@
-package db
+package wal
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/ZaninAndrea/microdot/pkg/blob"
 )
 
-type walWriter struct {
+type Writer struct {
 	bucket blob.Bucket
 
 	mu             sync.Mutex
@@ -21,14 +21,14 @@ type walWriter struct {
 	flushListeners []chan error
 }
 
-func newWalWriter(bucket blob.Bucket) *walWriter {
-	return &walWriter{
+func NewWriter(bucket blob.Bucket) *Writer {
+	return &Writer{
 		bucket: bucket,
 	}
 }
 
-func (w *walWriter) AddDocument(streamLabels Labels, data map[string]any) error {
-	err := <-w.write(streamLabels, data)
+func (w *Writer) AddDocument(ctx context.Context, record Record) error {
+	err := <-w.write(record)
 	if err != nil {
 		return err
 	}
@@ -36,22 +36,14 @@ func (w *walWriter) AddDocument(streamLabels Labels, data map[string]any) error 
 	return nil
 }
 
-func (w *walWriter) Close() error {
+func (w *Writer) Close(ctx context.Context) error {
 	w.flush()
 
 	return nil
 }
 
-func (w *walWriter) write(streamLabels Labels, data map[string]any) chan error {
-	// Marshal data to JSON
-	var jsonData struct {
-		StreamLabels Labels
-		Data         map[string]any
-	}
-	jsonData.StreamLabels = streamLabels
-	jsonData.Data = data
-
-	jsonBytes, err := json.Marshal(jsonData)
+func (w *Writer) write(record Record) chan error {
+	jsonBytes, err := json.Marshal(record)
 	if err != nil {
 		errChan := make(chan error, 1)
 		errChan <- err
@@ -87,7 +79,7 @@ var FLUSH_INTERVAL = 1 * time.Second
 
 // createWriterIfMissing creates a new writer if there isn't an active one.
 // It should be called with the writerLock held.
-func (w *walWriter) createWriterIfMissing() {
+func (w *Writer) createWriterIfMissing() {
 	if w.activeWriter != nil {
 		return
 	}
@@ -104,7 +96,7 @@ func (w *walWriter) createWriterIfMissing() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*FLUSH_INTERVAL)
 		defer cancel()
 
-		err := w.bucket.PutObject(ctx, walFileName(), reader)
+		err := w.bucket.PutObject(ctx, w.walFileName(), reader)
 		reader.Close()
 		errChannel <- err
 	}()
@@ -116,7 +108,7 @@ func (w *walWriter) createWriterIfMissing() {
 	}()
 }
 
-func (w *walWriter) flush() {
+func (w *Writer) flush() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -131,13 +123,13 @@ func (w *walWriter) flush() {
 	w.broadcastFlush(err)
 }
 
-func (w *walWriter) broadcastFlush(err error) {
+func (w *Writer) broadcastFlush(err error) {
 	for _, listener := range w.flushListeners {
 		listener <- err
 	}
 	w.flushListeners = nil
 }
 
-func walFileName() string {
-	return fmt.Sprintf("wal/%d_%d.log", time.Now().UnixNano(), rand.Intn(1_000_000))
+func (w *Writer) walFileName() string {
+	return WAL_FILE_PREFIX + fmt.Sprintf("%d_%d.log", time.Now().UnixNano(), rand.Intn(1_000_000))
 }

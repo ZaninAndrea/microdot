@@ -3,8 +3,11 @@ package blob
 import (
 	"context"
 	"io"
+	"iter"
 	"os"
 	"path/filepath"
+
+	"github.com/ZaninAndrea/microdot/pkg/containers"
 )
 
 type DiskBucket struct {
@@ -71,11 +74,6 @@ func (b *DiskBucket) GetObjectRange(ctx context.Context, key string, start, end 
 	}, nil
 }
 
-func (b *DiskBucket) DeleteObject(ctx context.Context, key string) error {
-	fullPath := filepath.Join(b.basePath, key)
-	return os.Remove(fullPath)
-}
-
 type limitReadCloser struct {
 	r io.Reader
 	c io.Closer
@@ -87,4 +85,32 @@ func (l *limitReadCloser) Read(p []byte) (int, error) {
 
 func (l *limitReadCloser) Close() error {
 	return l.c.Close()
+}
+
+func (b *DiskBucket) DeleteObject(ctx context.Context, key string) error {
+	fullPath := filepath.Join(b.basePath, key)
+	return os.Remove(fullPath)
+}
+
+func (b *DiskBucket) ListObjects(ctx context.Context, prefix string) iter.Seq[containers.Result[string]] {
+	return func(yield func(containers.Result[string]) bool) {
+		err := filepath.Walk(filepath.Join(b.basePath, prefix), func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() {
+				relPath, err := filepath.Rel(b.basePath, path)
+				if err != nil {
+					return err
+				}
+				if !yield(containers.Ok(relPath)) {
+					return io.EOF
+				}
+			}
+			return nil
+		})
+		if err != nil && err != io.EOF {
+			yield(containers.Err[string](err))
+		}
+	}
 }
