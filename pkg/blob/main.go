@@ -9,7 +9,7 @@ import (
 )
 
 type Bucket interface {
-	PutObject(ctx context.Context, key string, content io.Reader) error
+	PutObject(ctx context.Context, key string, content io.Reader, replaceExisting bool) error
 	GetObject(ctx context.Context, key string) (io.ReadCloser, error)
 	GetObjectRange(ctx context.Context, key string, start, end int) (io.ReadCloser, error)
 	DeleteObject(ctx context.Context, key string) error

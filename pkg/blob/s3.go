@@ -25,11 +25,17 @@ func NewS3Bucket(client *s3.Client, name string) *S3Bucket {
 	}
 }
 
-func (b *S3Bucket) PutObject(ctx context.Context, key string, content io.Reader) error {
+func (b *S3Bucket) PutObject(ctx context.Context, key string, content io.Reader, replaceExisting bool) error {
+	var ifNoneMatch *string
+	if !replaceExisting {
+		ifNoneMatch = new("*")
+	}
+
 	_, err := b.manager.UploadObject(ctx, &transfermanager.UploadObjectInput{
-		Bucket: new(b.name),
-		Key:    new(key),
-		Body:   content,
+		Bucket:      new(b.name),
+		Key:         new(key),
+		Body:        content,
+		IfNoneMatch: ifNoneMatch,
 	})
 	return err
 }

@@ -28,14 +28,19 @@ func NewDiskBucket(basePath string) (*DiskBucket, error) {
 	}, nil
 }
 
-func (b *DiskBucket) PutObject(ctx context.Context, key string, content io.Reader) (retErr error) {
+func (b *DiskBucket) PutObject(ctx context.Context, key string, content io.Reader, replaceExisting bool) (retErr error) {
 	fullPath := filepath.Join(b.basePath, key)
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
 
-	f, err := os.Create(fullPath)
+	flags := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	if !replaceExisting {
+		flags |= os.O_EXCL
+	}
+
+	f, err := os.OpenFile(fullPath, flags, 0644)
 	if err != nil {
 		return err
 	}

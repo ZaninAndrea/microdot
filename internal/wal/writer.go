@@ -100,7 +100,7 @@ func (w *Writer) createWriterIfMissing() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*FLUSH_INTERVAL)
 		defer cancel()
 
-		err := w.bucket.PutObject(ctx, w.walFileName(), reader)
+		err := w.bucket.PutObject(ctx, w.walFileName(), reader, false)
 		reader.Close()
 		errChannel <- err
 	}()
