@@ -6,6 +6,7 @@ import (
 	"iter"
 	"strings"
 
+	"github.com/ZaninAndrea/microdot/internal/db/types"
 	"github.com/ZaninAndrea/microdot/internal/wal"
 	"github.com/ZaninAndrea/microdot/pkg/blob"
 	"github.com/ZaninAndrea/microdot/pkg/containers"
@@ -25,9 +26,7 @@ func NewDB(bucket blob.Bucket) (*DB, error) {
 	}, nil
 }
 
-type Labels map[string]string
-
-func (d *DB) AddDocument(streamLabels Labels, data map[string]any) error {
+func (d *DB) AddDocument(streamLabels types.Labels, data types.Document) error {
 	// Check mandatory fields
 	if _, ok := data["msg"]; !ok {
 		return fmt.Errorf("missing 'msg' field in document")
@@ -45,19 +44,16 @@ func (d *DB) AddDocument(streamLabels Labels, data map[string]any) error {
 		return fmt.Errorf("document cannot contain '_id' field")
 	}
 
-	return d.walWriter.AddDocument(context.Background(), wal.Record{
-		StreamLabels: streamLabels,
-		Data:         data,
-	})
+	return d.walWriter.AddDocument(context.Background(), streamLabels, data)
 }
 
 type QueryResult struct {
 	StreamID   uint64
 	DocumentID uint64
-	Document   map[string]any
+	Document   types.Document
 }
 
-func (d *DB) Query(streamLabels Labels, query string) iter.Seq[containers.Result[QueryResult]] {
+func (d *DB) Query(streamLabels types.Labels, query string) iter.Seq[containers.Result[QueryResult]] {
 	return func(yield func(containers.Result[QueryResult]) bool) {
 		for record := range d.walReader.Iter(context.Background()) {
 			if record.IsErr() {
@@ -124,7 +120,7 @@ func (d *DB) Close() error {
 	return nil
 }
 
-func matchesLabels(recordLabels, queryLabels Labels) bool {
+func matchesLabels(recordLabels, queryLabels types.Labels) bool {
 	for key, value := range queryLabels {
 		if recordValue, ok := recordLabels[key]; !ok || recordValue != value {
 			return false
@@ -134,7 +130,7 @@ func matchesLabels(recordLabels, queryLabels Labels) bool {
 	return true
 }
 
-func matchesQuery(document map[string]any, query string) bool {
+func matchesQuery(document types.Document, query string) bool {
 	msgValue, ok := document["msg"]
 	if !ok {
 		return false

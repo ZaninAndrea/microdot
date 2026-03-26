@@ -21,11 +21,11 @@ func NewReader(bucket blob.Bucket) *Reader {
 	}
 }
 
-func (r *Reader) Iter(ctx context.Context) iter.Seq[containers.Result[Record]] {
-	return func(yield func(containers.Result[Record]) bool) {
+func (r *Reader) Iter(ctx context.Context) iter.Seq[containers.Result[record]] {
+	return func(yield func(containers.Result[record]) bool) {
 		for obj := range r.bucket.ListObjects(ctx, WAL_FILE_PREFIX) {
 			if obj.Err != nil {
-				if !yield(containers.Err[Record](obj.Err)) {
+				if !yield(containers.Err[record](obj.Err)) {
 					return
 				}
 				continue
@@ -40,11 +40,11 @@ func (r *Reader) Iter(ctx context.Context) iter.Seq[containers.Result[Record]] {
 	}
 }
 
-func (r *Reader) iterObject(ctx context.Context, key string) iter.Seq[containers.Result[Record]] {
-	return func(yield func(containers.Result[Record]) bool) {
+func (r *Reader) iterObject(ctx context.Context, key string) iter.Seq[containers.Result[record]] {
+	return func(yield func(containers.Result[record]) bool) {
 		reader, err := r.bucket.GetObject(ctx, key)
 		if err != nil {
-			yield(containers.Err[Record](err))
+			yield(containers.Err[record](err))
 			return
 		}
 
@@ -54,12 +54,12 @@ func (r *Reader) iterObject(ctx context.Context, key string) iter.Seq[containers
 			// Decode the JSON line into a map[string]any.
 			// UseNumber() is needed to preserve the full precision of uint64 values, which would otherwise
 			// be degraded if decoded as float64.
-			var doc Record
+			var doc record
 			dec := json.NewDecoder(bytes.NewReader(scanner.Bytes()))
 			dec.UseNumber()
 			err := dec.Decode(&doc)
 			if err != nil {
-				if !yield(containers.Err[Record](err)) {
+				if !yield(containers.Err[record](err)) {
 					return
 				}
 				continue
@@ -81,7 +81,7 @@ func (r *Reader) iterObject(ctx context.Context, key string) iter.Seq[containers
 		}
 
 		if err := scanner.Err(); err != nil {
-			yield(containers.Err[Record](err))
+			yield(containers.Err[record](err))
 		}
 	}
 }

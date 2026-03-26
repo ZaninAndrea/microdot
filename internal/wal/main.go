@@ -1,8 +1,10 @@
 package wal
 
+import "github.com/ZaninAndrea/microdot/internal/db/types"
+
 const WAL_FILE_PREFIX = "wal/"
 
-type Record struct {
-	StreamLabels map[string]string `json:"l"`
-	Data         map[string]any    `json:"d"`
+type record struct {
+	StreamLabels types.Labels   `json:"l"`
+	Data         types.Document `json:"d"`
 }

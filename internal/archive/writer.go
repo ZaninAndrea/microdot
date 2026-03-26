@@ -8,6 +8,7 @@ import (
 	"path"
 	"sort"
 
+	"github.com/ZaninAndrea/microdot/internal/db/types"
 	"github.com/ZaninAndrea/microdot/pkg/compression"
 )
 
@@ -21,7 +22,7 @@ type Writer struct {
 	blocks       []blockMetadata
 }
 
-func NewWriter(columns []ColumnDef, labels map[string]string, dataFile, metadataFile io.WriteCloser) (*Writer, error) {
+func NewWriter(columns []ColumnDef, labels types.Labels, dataFile, metadataFile io.WriteCloser) (*Writer, error) {
 	if len(columns) == 0 {
 		return nil, ErrNoColumns
 	}
@@ -43,7 +44,7 @@ func NewWriter(columns []ColumnDef, labels map[string]string, dataFile, metadata
 	return writer, nil
 }
 
-func NewWriterFS(columns []ColumnDef, labels map[string]string, folder, name string) (*Writer, error) {
+func NewWriterFS(columns []ColumnDef, labels types.Labels, folder, name string) (*Writer, error) {
 	// Open the data and metadata files for writing
 	dataFile, err := os.Create(path.Join(folder, name+".data.bin"))
 	if err != nil {

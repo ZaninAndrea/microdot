@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ZaninAndrea/microdot/internal/db/types"
 	"github.com/ZaninAndrea/microdot/pkg/blob"
 )
 
@@ -27,8 +28,11 @@ func NewWriter(bucket blob.Bucket) *Writer {
 	}
 }
 
-func (w *Writer) AddDocument(ctx context.Context, record Record) error {
-	err := <-w.write(record)
+func (w *Writer) AddDocument(ctx context.Context, labels types.Labels, doc types.Document) error {
+	err := <-w.write(record{
+		StreamLabels: labels,
+		Data:         doc,
+	})
 	if err != nil {
 		return err
 	}
@@ -42,8 +46,8 @@ func (w *Writer) Close(ctx context.Context) error {
 	return nil
 }
 
-func (w *Writer) write(record Record) chan error {
-	jsonBytes, err := json.Marshal(record)
+func (w *Writer) write(r record) chan error {
+	jsonBytes, err := json.Marshal(r)
 	if err != nil {
 		errChan := make(chan error, 1)
 		errChan <- err
