@@ -22,7 +22,7 @@ type Reader struct {
 	blocks       []blockMetadata
 }
 
-func NewReader(dataFile, metadataFile io.ReadSeekCloser) (*Reader, error) {
+func NewReader(dataFile, metadataFile io.ReadCloser) (*Reader, error) {
 	reader := &Reader{
 		dataFile:     StructuredReader{r: dataFile},
 		metadataFile: StructuredReader{r: metadataFile},

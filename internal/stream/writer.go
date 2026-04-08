@@ -47,12 +47,10 @@ func (w *Writer) AppendDocuments(
 
 	eg, uploadContext := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		dataFileName := fmt.Sprintf("%s%d/%d.data", STREAM_FILE_PREFIX, streamID, 0) // TODO: use a proper file naming scheme to avoid collisions
-		return w.bucket.PutObject(uploadContext, dataFileName, dataReader, false)
+		return w.bucket.PutObject(uploadContext, dataFileName(streamID, 0), dataReader, false) // TODO: use a proper file naming scheme to avoid collisions
 	})
 	eg.Go(func() error {
-		metadataFileName := fmt.Sprintf("%s%d/%d.metadata", STREAM_FILE_PREFIX, streamID, 0) // TODO: use a proper file naming scheme to avoid collisions
-		return w.bucket.PutObject(uploadContext, metadataFileName, metadataReader, false)
+		return w.bucket.PutObject(uploadContext, metadataFileName(streamID, 0), metadataReader, false) // TODO: use a proper file naming scheme to avoid collisions
 	})
 
 	// Stream the data in archive format to the pipe

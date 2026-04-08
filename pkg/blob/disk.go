@@ -6,6 +6,7 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/ZaninAndrea/microdot/pkg/containers"
 )
@@ -13,6 +14,8 @@ import (
 type DiskBucket struct {
 	basePath string
 }
+
+var _ Bucket = (*DiskBucket)(nil)
 
 func NewDiskBucket(basePath string) (*DiskBucket, error) {
 	absPath, err := filepath.Abs(basePath)
@@ -42,6 +45,10 @@ func (b *DiskBucket) PutObject(ctx context.Context, key string, content io.Reade
 
 	f, err := os.OpenFile(fullPath, flags, 0644)
 	if err != nil {
+		if os.IsExist(err) {
+			return OBJECT_ALREADY_EXISTS_ERROR
+		}
+
 		return err
 	}
 	defer func() {
@@ -55,15 +62,48 @@ func (b *DiskBucket) PutObject(ctx context.Context, key string, content io.Reade
 	return
 }
 
-func (b *DiskBucket) GetObject(ctx context.Context, key string) (io.ReadCloser, error) {
+func (b *DiskBucket) PutObjectIfMatch(ctx context.Context, key string, content io.Reader, etag string) error {
 	fullPath := filepath.Join(b.basePath, key)
-	return os.Open(fullPath)
+
+	currentEtag, err := computeEtag(fullPath)
+	if err != nil {
+		return err
+	}
+	if currentEtag != etag {
+		return ETAG_CHANGED_ERROR
+	}
+
+	return b.PutObject(ctx, key, content, true)
+}
+
+func (b *DiskBucket) GetObject(ctx context.Context, key string) (io.ReadCloser, string, error) {
+	fullPath := filepath.Join(b.basePath, key)
+
+	// Compute the ETag as the file's modification time in Unix nanoseconds
+	etag, err := computeEtag(fullPath)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Open the file for reading
+	f, err := os.Open(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, "", NO_SUCH_KEY_ERROR
+		}
+		return nil, "", err
+	}
+
+	return f, etag, nil
 }
 
 func (b *DiskBucket) GetObjectRange(ctx context.Context, key string, start, end int) (io.ReadCloser, error) {
 	fullPath := filepath.Join(b.basePath, key)
 	f, err := os.Open(fullPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, NO_SUCH_KEY_ERROR
+		}
 		return nil, err
 	}
 
@@ -92,9 +132,27 @@ func (l *limitReadCloser) Close() error {
 	return l.c.Close()
 }
 
-func (b *DiskBucket) DeleteObject(ctx context.Context, key string) error {
+func (b *DiskBucket) DeleteObject(ctx context.Context, key string, ifMatch *string) error {
 	fullPath := filepath.Join(b.basePath, key)
-	return os.Remove(fullPath)
+
+	if ifMatch != nil {
+		currentEtag, err := computeEtag(fullPath)
+		if err != nil {
+			return err
+		}
+		if currentEtag != *ifMatch {
+			return ETAG_CHANGED_ERROR
+		}
+	}
+
+	err := os.Remove(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return NO_SUCH_KEY_ERROR
+		}
+		return err
+	}
+	return nil
 }
 
 func (b *DiskBucket) ListObjects(ctx context.Context, prefix string) iter.Seq[containers.Result[string]] {
@@ -118,4 +176,13 @@ func (b *DiskBucket) ListObjects(ctx context.Context, prefix string) iter.Seq[co
 			yield(containers.Err[string](err))
 		}
 	}
+}
+
+func computeEtag(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+
+	return strconv.FormatInt(info.ModTime().UnixNano(), 10), nil
 }
